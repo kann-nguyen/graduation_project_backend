@@ -1,0 +1,7 @@
+{
+  "watch": ["src"],
+  "ignore": ["src/**/*.test.ts", "node_modules"],
+  "ext": "ts,mjs,js,json,graphql",
+  "exec": "cross-env NODE_PATH=./src ts-node ./src/server.ts",
+  "legacyWatch": true
+}
