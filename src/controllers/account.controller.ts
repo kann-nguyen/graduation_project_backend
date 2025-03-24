@@ -11,6 +11,8 @@ import {
 import { errorResponse, successResponse } from "../utils/responseFormat";
 import generateRandomName from "../utils/generateName";
 
+
+// Get account details of the authenticated user
 export async function get(req: Request, res: Response) {
   try {
     const account = req.user;
@@ -29,6 +31,7 @@ export async function get(req: Request, res: Response) {
   }
 }
 
+// Get all accounts from the database
 export async function getAll(req: Request, res: Response) {
   try {
     const accounts = await AccountModel.find();
@@ -38,6 +41,7 @@ export async function getAll(req: Request, res: Response) {
   }
 }
 
+// Get a specific account by ID
 export async function getById(req: Request, res: Response) {
   const { id } = req.params;
   try {
@@ -53,6 +57,7 @@ export async function getById(req: Request, res: Response) {
   }
 }
 
+// Create a new account
 export async function create(req: Request, res: Response) {
   const { username, password, confirmPassword, email } = req.body;
   if (password !== confirmPassword) {
@@ -92,6 +97,7 @@ export async function create(req: Request, res: Response) {
   }
 }
 
+//change password
 export async function changePassword(req: Request, res: Response) {
   const id = req.user?._id;
   const { data } = req.body;
@@ -120,6 +126,8 @@ export async function changePassword(req: Request, res: Response) {
   }
 }
 
+
+//update thông tin tài khoản
 export async function updateAccountInfo(req: Request, res: Response) {
   const { id } = req.params;
   const { data } = req.body;
@@ -143,6 +151,8 @@ export async function updateAccountInfo(req: Request, res: Response) {
   }
 }
 
+
+//remove tài khoản
 export async function remove(req: Request, res: Response) {
   const { id } = req.params;
   try {
@@ -156,6 +166,7 @@ export async function remove(req: Request, res: Response) {
   }
 }
 
+//thay đổi quyền của user
 export async function updateAccountPermission(req: Request, res: Response) {
   const { id } = req.params;
   const { data } = req.body; // data is an array of permitted permission
@@ -177,6 +188,8 @@ export async function updateAccountPermission(req: Request, res: Response) {
     return res.json(errorResponse(`Internal server error: ${error}`));
   }
 }
+
+//thay đổi kết nối github
 export async function updateGithubAccessToken(req: Request, res: Response) {
   const id = req.user?._id;
   const { data } = req.body;
@@ -208,6 +221,8 @@ export async function updateGithubAccessToken(req: Request, res: Response) {
     return res.json(errorResponse(`Internal server error: ${error}`));
   }
 }
+
+//thay đổi kết nối gitlab
 export async function updateGitlabAccessToken(req: Request, res: Response) {
   const id = req.user?._id;
   const { data } = req.body;
@@ -239,6 +254,8 @@ export async function updateGitlabAccessToken(req: Request, res: Response) {
     return res.json(errorResponse(`Internal server error: ${error}`));
   }
 }
+
+//xóa kết nổi github
 export async function disconnectFromGithub(req: Request, res: Response) {
   const account = req.user;
   try {
@@ -261,6 +278,8 @@ export async function disconnectFromGithub(req: Request, res: Response) {
     return res.json(errorResponse(`Internal server error: ${error}`));
   }
 }
+
+//xóa kết nối gitlab
 export async function disconnectFromGitlab(req: Request, res: Response) {
   const account = req.user;
   try {
@@ -283,27 +302,38 @@ export async function disconnectFromGitlab(req: Request, res: Response) {
     return res.json(errorResponse(`Internal server error: ${error}`));
   }
 }
+
+//thay đổi scanner của 1 tài khoản
 export async function updateScannerPreference(req: Request, res: Response) {
-  const id = req.user?._id;
-  const { data } = req.body;
-  const { scanner: scannerName, endpoint } = data;
+  const id = req.user?._id; // Lấy ID của tài khoản từ request (nếu có)
+  const { data } = req.body; // Lấy dữ liệu từ request body
+  const { scanner: scannerName, endpoint } = data; // Trích xuất thông tin máy quét từ dữ liệu nhận được
+
   try {
+    // Tìm máy quét trong database dựa vào tên scannerName
     const scanner = await ScannerModel.findOne({ name: scannerName });
+
+    // Cập nhật thông tin máy quét cho tài khoản
     const acc = await AccountModel.findByIdAndUpdate(id, {
       scanner: {
-        endpoint,
-        details: scanner,
+        endpoint, // Cập nhật endpoint mới của máy quét
+        details: scanner, // Gán thông tin chi tiết về máy quét từ database
       },
     });
+
+    // Ghi lại lịch sử thay đổi vào bảng ChangeHistoryModel
     await ChangeHistoryModel.create({
-      objectId: acc?._id,
-      action: "update",
-      timestamp: Date.now(),
-      description: `Account ${acc?.username} scanner preference is updated`,
-      account: req.user?._id,
+      objectId: acc?._id, // ID của tài khoản vừa cập nhật
+      action: "update", // Hành động là "update"
+      timestamp: Date.now(), // Ghi lại thời gian cập nhật
+      description: `Account ${acc?.username} scanner preference is updated`, // Mô tả thay đổi
+      account: req.user?._id, // Người thực hiện thay đổi
     });
+
+    // Trả về phản hồi thành công
     return res.json(successResponse(null, "Scanner preference updated"));
   } catch (error) {
+    // Trả về lỗi nếu có vấn đề trong quá trình xử lý
     return res.json(errorResponse(`Internal server error: ${error}`));
   }
 }

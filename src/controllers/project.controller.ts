@@ -2,6 +2,7 @@ import { Request, Response } from "express";
 import { PhaseModel, ProjectModel, UserModel } from "../models/models";
 import { Phase } from "../models/phase";
 import { errorResponse, successResponse } from "../utils/responseFormat";
+
 export async function get(req: Request, res: Response) {
   try {
     const { projectName } = req.params;

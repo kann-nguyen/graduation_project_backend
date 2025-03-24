@@ -15,22 +15,28 @@ import {
   importGitlabScanResult,
 } from "../utils/vuln";
 import axios from "axios";
+
+// Lấy thông tin chi tiết của một Phase theo ID
 export async function get(req: Request, res: Response) {
-  const { id } = req.params;
+  const { id } = req.params; // Lấy ID của Phase từ request params
   try {
+    // Tìm Phase theo ID và populate dữ liệu liên quan
     const phase = await PhaseModel.findById(id).populate([
       {
-        path: "tasks",
+        path: "tasks", // Lấy danh sách tasks liên quan đến Phase
       },
       {
-        path: "artifacts",
+        path: "artifacts", // Lấy danh sách artifacts của Phase
         populate: {
-          path: "threatList vulnerabilityList",
+          path: "threatList vulnerabilityList", // Populate danh sách threats và vulnerabilities
         },
       },
     ]);
+
+    // Trả về thông tin Phase nếu tìm thấy
     return res.json(successResponse(phase, "Phase found"));
   } catch (error) {
+    // Xử lý lỗi nếu có vấn đề trong quá trình truy vấn
     return res.json(errorResponse(`Internal server error: ${error}`));
   }
 }

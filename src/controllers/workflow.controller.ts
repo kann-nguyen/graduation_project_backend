@@ -5,6 +5,7 @@ import { Gitlab } from "@gitbeaker/rest";
 import { ProjectModel } from "../models/models";
 import { GitlabType, OctokitType } from "..";
 import { safeGithubClient, safeGitlabClient } from "../utils/token";
+
 export async function getWorkflows(req: Request, res: Response) {
   const { projectName } = req.query as { projectName: string };
   const project = await ProjectModel.findOne({ name: projectName });
@@ -71,9 +72,7 @@ async function getGithubWorkflows(
   return workflows;
 }
 
-// Only support gitlab-ci.yml for now
 async function getGitlabWorkflows(api: GitlabType, projectName: string) {
-  // Create an URL encoded path for the project to use for requests
   const projectData = await api.Projects.show(projectName);
   const defaultBranch = projectData.defaultBranch;
   const data = await api.RepositoryFiles.showRaw(
@@ -114,7 +113,6 @@ export async function pushNewWorkflow(req: Request, res: Response) {
         targetBranch
       );
       if (!branchExists) {
-        // Create the branch if it doesn't exist
         await createBranchGithub(
           octokit,
           owner,
@@ -144,9 +142,6 @@ export async function pushNewWorkflow(req: Request, res: Response) {
       return res.json(errorResponse("Failed to push workflow"));
     }
   } else if (url.includes("gitlab")) {
-    const accessToken = req.user?.thirdParty.find(
-      (x) => x.name === "Gitlab"
-    )?.accessToken;
     const api = await safeGitlabClient(req.user?._id);
     try {
       const projectData = await api.Projects.show(projectName);
@@ -158,7 +153,6 @@ export async function pushNewWorkflow(req: Request, res: Response) {
         targetBranch
       );
       if (!branchExists) {
-        // Create the branch if it doesn't exist
         await createBranchGitlab(api, projectName, targetBranch, defaultBranch);
       }
       await api.RepositoryFiles.edit(
@@ -175,6 +169,7 @@ export async function pushNewWorkflow(req: Request, res: Response) {
     }
   }
 }
+
 
 async function checkBranchExistsGithub(
   octo: OctokitType,
