@@ -34,7 +34,7 @@ export async function create(req: Request, res: Response) {
     // Create a new scanner
     const newScanner = await ScannerModel.create({
       name: data.name,
-      createdBy: req.user?.username,
+      createdBy: req.user?.username ? req.user?.username : "admin",
       config: data.config,
     });
     // Generate Dockerfile based on the scanner config
@@ -45,7 +45,7 @@ export async function create(req: Request, res: Response) {
       action: "create",
       timestamp: Date.now(),
       description: `Account ${req.user?.username} create a new scanner`,
-      account: req.user?._id,
+      account: req.user?._id ? req.user?._id : "67e2c58c055af0d862a5401c",
     });
     return res.json(successResponse(dockerfile, "Scanner created"));
   } catch (error) {

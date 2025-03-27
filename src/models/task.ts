@@ -3,6 +3,7 @@ import { Base, TimeStamps } from "@typegoose/typegoose/lib/defaultClasses";
 import { PhaseModel, UserModel } from "./models";
 
 export interface Task extends Base {}
+
 @post<Task>("findOneAndDelete", async function (this, doc) {
   if (!doc) return;
   // Remove task from phase
@@ -17,6 +18,7 @@ export interface Task extends Base {}
   );
   await Promise.all([deleteFromPhase, deleteFromUser]);
 })
+
 export class Task extends TimeStamps {
   @prop({ required: true, type: String })
   public name!: string;

@@ -1,9 +1,9 @@
-import { ArraySubDocumentType, post, prop } from "@typegoose/typegoose";
+import { pre, prop, post } from "@typegoose/typegoose";
 import { Base } from "@typegoose/typegoose/lib/defaultClasses";
-import permissions from "../utils/permission";
-import { AccountModel, ProjectModel, ScannerModel, UserModel } from "./models";
+import { ScannerModel, AccountModel } from "./models";
 import { Scanner } from "./scanner";
-import { ThirdParty } from "./thirdParty";
+import permissions from "../utils/permission";
+
 class AccountScanner {
   @prop()
   public endpoint?: string;
@@ -11,57 +11,50 @@ class AccountScanner {
   @prop({ type: () => Scanner, required: true })
   public details!: Scanner;
 }
+
 export interface Account extends Base {}
+
+@pre<Account>("save", async function (next) {
+  if (!this.scanner) {
+    console.log("[INFO] Setting default scanner for new account...");
+    const scanner = await ScannerModel.findOne({ name: "Grype" });
+    if (scanner) {
+      this.scanner = { details: scanner };
+      console.log("[SUCCESS] Default scanner set to Grype.");
+    } else {
+      console.warn("[WARNING] No default scanner found! Skipping...");
+    }
+  }
+  next();
+})
+
 @post<Account>("save", async function () {
   const account = await AccountModel.findOne({ username: this.username });
+
   // Set permission based on role
   if (this.role === "admin") {
     await AccountModel.findByIdAndUpdate(account?._id, {
       permission: permissions,
     });
   } else if (this.role === "manager") {
-    const perm = permissions.filter((p) => {
-      if (!p.includes("user")) return true;
-    });
+    const perm = permissions.filter((p) => !p.includes("user"));
     await AccountModel.findByIdAndUpdate(account?._id, {
       permission: perm,
     });
   } else {
-    const perm = permissions.filter((p) => {
-      if (
+    const perm = permissions.filter(
+      (p) =>
         !p.includes("user") &&
         p.includes("phase") &&
         !p.includes("project") &&
         !p.includes("artifact")
-      )
-        return true;
-    });
+    );
     await AccountModel.findByIdAndUpdate(account?._id, {
       permission: perm,
     });
   }
-  // Set scanner preference
-  const scanner = await ScannerModel.findOne({ name: "Grype" });
-  if (scanner) {
-    await AccountModel.findByIdAndUpdate(account?._id, {
-      scanner: {
-        details: scanner,
-      },
-    });
-  }
 })
-// Cascade delete on linking account
-@post<Account>("findOneAndDelete", async function (this, doc) {
-  if (!doc) return;
-  const deleteUser = UserModel.findOneAndDelete({
-    account: doc._id,
-  });
-  const deleteProject = ProjectModel.findOneAndDelete({
-    createdBy: `Github_${doc.username}`,
-  });
-  // Optionally, delete tasks, tickets and history (TODO?)
-  await Promise.all([deleteUser, deleteProject]);
-})
+
 export class Account {
   @prop({ required: true, type: String })
   public username!: string;
@@ -71,9 +64,6 @@ export class Account {
 
   @prop({ lowercase: true, type: String })
   public email?: string;
-
-  @prop({ type: () => ThirdParty, default: [], required: true })
-  public thirdParty!: ArraySubDocumentType<ThirdParty>[];
 
   @prop({ type: () => AccountScanner })
   public scanner!: AccountScanner;

@@ -23,7 +23,7 @@ phaseRoute.get("/template/:id", getOneTemplate);
 phaseRoute.patch("/template/:id", updateTemplate);
 phaseRoute.delete("/template/:id", deleteTemplate);
 phaseRoute.get("/:id", get);
-phaseRoute.post("/template", createFromTemplate);
+phaseRoute.post("/create", createFromTemplate);
 phaseRoute.put("/:id", update);
 phaseRoute.delete("/:id", remove);
 phaseRoute.patch("/:id/task/add/:taskId", addTaskToPhase);
