@@ -15,6 +15,8 @@ import {
   importGitlabScanResult,
 } from "../utils/vuln";
 import axios from "axios";
+import { Artifact } from "../models/artifact";
+import { validateAndScanDocument } from "./scanner.controller";
 
 // Lấy thông tin chi tiết của một Phase theo ID
 export async function get(req: Request, res: Response) {
@@ -218,6 +220,8 @@ export async function addArtifactToPhase(req: Request, res: Response) {
   try {
     console.log("[INFO] Creating new artifact", data);
     const artifact = await ArtifactModel.create(data);
+    // Scan the artifact after creation
+    await scanArtifact(artifact);
     console.log("[SUCCESS] Artifact created", artifact);
 
     const updatedPhase = await PhaseModel.findByIdAndUpdate(
@@ -227,52 +231,43 @@ export async function addArtifactToPhase(req: Request, res: Response) {
     );
     console.log("[SUCCESS] Updated phase with new artifact", updatedPhase);
 
-    switch (type) {
-      case "image":
-        let url = `${process.env.IMAGE_SCANNING_URL}/image`;
-        console.log("[INFO] Image scanning initiated for", name);
-
-        // Connect to scanner to init image scanning
-        const account = req.user;
-        //console.log("[DEBUG] req.user:", account);
-        // if (account) {
-        //   // Check for scanner preference
-        //   const someEndpoint = account?.scanner?.endpoint || process.env.DEFAULT_SCANNER_URL;
-        //   if (someEndpoint) {
-        //     url = `${someEndpoint}/image`;
-        //   }
-        // }
-        try {
-          console.log("[INFO] Sending request to image scanner", { url, name, version });
-          await axios.get(url, {
-            params: {
-              name: `${name}:${version}`,
-            },
-          });
-          console.log("[SUCCESS] Image scanning triggered for artifact:", name);
-        } catch (error) {
-          console.error("[ERROR] Failed to trigger image scanning", error);
-        }
-        break;
-      case "source code":
-        console.log("[INFO] Source code scanning initiated for", artifactUrl);
-        if (artifactUrl.includes("github")) {
-          console.log("[INFO] Importing GitHub scan result for", artifactUrl);
-          await importGithubScanResult(req.user?._id, artifactUrl);
-        } else {
-          console.log("[INFO] Importing GitLab scan result for", artifactUrl);
-          await importGitlabScanResult(req.user?._id, artifactUrl);
-        }
-        break;
-      default:
-        console.log("[INFO] No scanning required for type:", type);
-        break;
-    }
     return res.json(successResponse(null, "Artifact added to phase"));
   } catch (error) {
     console.error("[ERROR] Internal server error", error);
     return res.json(errorResponse(`Internal server error: ${error}`));
   }
+}
+
+export async function scanArtifact(artifact: Artifact) {
+  console.log("[INFO] Scanning artifact", artifact.name);
+  let state = "S1"; // Default state
+
+  switch (artifact.type) {
+    case "docs":
+      await validateAndScanDocument(artifact);
+      break;
+    case "source code":
+      break;
+    case "image":
+      break;
+    case "test report":
+      break;
+    case "version release":
+      break;
+    case "deployment config":
+      break;
+    case "log":
+      break;
+    case "monitoring dashboard":
+      break;          
+    default:
+      console.log("[INFO] Unknown artifact type, assigning default state");
+      break;
+  }
+
+  artifact.state = state;
+  await ArtifactModel.updateOne({ _id: artifact._id }, { state });
+  console.log("[SUCCESS] Artifact scanned and state assigned:", state);
 }
 
 

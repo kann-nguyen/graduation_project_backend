@@ -17,7 +17,16 @@ export class Artifact extends TimeStamps {
 
   @prop({
     required: true,
-    enum: ["image", "log", "source code", "executable", "library"],
+    enum: [
+      "docs",
+      "source code",
+      "image",
+      "test report",
+      "version release",
+      "deployment config",
+      "log",
+      "monitoring dashboard",
+    ],
     type: String,
   })
   public type!: string;
@@ -36,4 +45,10 @@ export class Artifact extends TimeStamps {
 
   @prop({ type: String })
   public cpe?: string;
+
+  @prop({
+    enum: ["S1", "S2", "S3", "S4", "S5", "S6", "S7"],
+    type: String,
+  })
+  public state!: string;
 }
