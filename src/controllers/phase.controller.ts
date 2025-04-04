@@ -11,12 +11,13 @@ import {
 import { errorResponse, successResponse } from "../utils/responseFormat";
 import {
   fetchVulnsFromNVD,
-  importGithubScanResult,
-  importGitlabScanResult,
 } from "../utils/vuln";
-import axios from "axios";
 import { Artifact } from "../models/artifact";
-import { validateAndScanDocument } from "./scanner.controller";
+import { Types } from "mongoose";
+import {
+  scanDocumentInDocker,
+  scanSourceCode
+} from "./scanner.controller"
 
 // Lấy thông tin chi tiết của một Phase theo ID
 export async function get(req: Request, res: Response) {
@@ -188,17 +189,15 @@ export async function getTemplates(req: Request, res: Response) {
 export async function addArtifactToPhase(req: Request, res: Response) {
   const { id } = req.params;
   const { data } = req.body;
-  const { cpe, threatList, type, name, version, url: artifactUrl } = data;
+  const { cpe, threatList } = data;
 
   console.log("[INFO] Received request to add artifact to phase", { id, data });
-  
-  // Attempt to find CVEs if CPE exists
+
+  // Fetch vulnerabilities and threats before creating artifact
   if (cpe) {
-    console.log("[INFO] Fetching vulnerabilities for CPE:", cpe);
     try {
       const vulns = await fetchVulnsFromNVD(cpe);
       data.vulnerabilityList = vulns;
-      console.log("[SUCCESS] Retrieved vulnerabilities", vulns);
     } catch (error) {
       data.vulnerabilityList = [];
       console.error("[ERROR] Failed to fetch vulnerabilities", error);
@@ -206,11 +205,9 @@ export async function addArtifactToPhase(req: Request, res: Response) {
   }
 
   if (threatList) {
-    console.log("[INFO] Fetching threats for threat list:", threatList);
     try {
       const threats = await ThreatModel.find({ name: { $in: threatList } });
       data.threatList = threats;
-      console.log("[SUCCESS] Retrieved threats", threats);
     } catch (error) {
       data.threatList = [];
       console.error("[ERROR] Failed to fetch threats", error);
@@ -219,34 +216,46 @@ export async function addArtifactToPhase(req: Request, res: Response) {
 
   try {
     console.log("[INFO] Creating new artifact", data);
+    data.state = "S1"; // ✅ Gán state ban đầu là S1
     const artifact = await ArtifactModel.create(data);
-    // Scan the artifact after creation
-    await scanArtifact(artifact);
-    console.log("[SUCCESS] Artifact created", artifact);
+    console.log("[SUCCESS] Artifact created with initial state S1", artifact);
 
-    const updatedPhase = await PhaseModel.findByIdAndUpdate(
+    // ✅ Thêm artifact vào phase ngay lập tức
+    await PhaseModel.findByIdAndUpdate(
       id,
       { $addToSet: { artifacts: artifact._id } },
       { new: true }
     );
-    console.log("[SUCCESS] Updated phase with new artifact", updatedPhase);
 
-    return res.json(successResponse(null, "Artifact added to phase"));
+    // ✅ Trả về response ngay, để user thấy artifact trong phase
+    res.json(successResponse(null, "Artifact added to phase and scanning started in background"));
+
+    // ✅ Bắt đầu scan ở background
+    setImmediate(async () => {
+      try {
+        await scanArtifact(artifact, req.user?._id);
+      } catch (error) {
+        console.error("[ERROR] Scanning failed:", error);
+      }
+    });
+
   } catch (error) {
     console.error("[ERROR] Internal server error", error);
     return res.json(errorResponse(`Internal server error: ${error}`));
   }
 }
 
-export async function scanArtifact(artifact: Artifact) {
+
+export async function scanArtifact(artifact: Artifact, accountId: Types.ObjectId | undefined) {
   console.log("[INFO] Scanning artifact", artifact.name);
   let state = "S1"; // Default state
 
   switch (artifact.type) {
     case "docs":
-      await validateAndScanDocument(artifact);
+      state = await scanDocumentInDocker(artifact);
       break;
     case "source code":
+      state = await scanSourceCode(artifact, accountId);  // Use the new scanSourceCode function
       break;
     case "image":
       break;
@@ -269,7 +278,6 @@ export async function scanArtifact(artifact: Artifact) {
   await ArtifactModel.updateOne({ _id: artifact._id }, { state });
   console.log("[SUCCESS] Artifact scanned and state assigned:", state);
 }
-
 
 export async function removeArtifactFromPhase(req: Request, res: Response) {
   const { id, artifactId } = req.params;
