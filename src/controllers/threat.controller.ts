@@ -52,7 +52,7 @@ export async function get(req: Request, res: Response) {
     });
 
     // Lọc ra threat có ID khớp trong danh sách threatList của artifact
-    const threat = artifact?.threatList?.find((threat) => threat._id == id);
+    const threat = artifact?.threatList?.find((threatId) => threatId.toString() == id);
     if (!threat) {
       return res.json(errorResponse(`Threat not found`));
     }

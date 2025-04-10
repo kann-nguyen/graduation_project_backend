@@ -54,7 +54,7 @@ export class Threat {
   @prop({ required: true, type: String })
   public name!: string; // Tên của threat
 
-  @prop({ required: true, type: String })
+  @prop({ required: true, type: String, default: "" })
   public description!: string; // Mô tả threat
 
   @prop({

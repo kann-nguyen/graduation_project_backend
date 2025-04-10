@@ -1,65 +1,112 @@
-const axios = require('axios');
-const fs = require('fs').promises;
-const fileTypeFromBuffer = require('file-type').fromBuffer;
-const { exec } = require('child_process');
-const express = require('express');
-const tmp = require('tmp');
-const winston = require('winston');
+const express = require("express");
+const axios = require("axios");
+const fs = require("fs").promises;
+const { exec } = require("child_process");
+const tmp = require("tmp");
+const { fromBuffer } = require("file-type");
+require("dotenv").config();
 
 const app = express();
 app.use(express.json());
+const PORT = 4000;
 
-// Logger configuration
-const logger = winston.createLogger({
-  level: 'info',
-  format: winston.format.combine(
-    winston.format.timestamp(),
-    winston.format.json()
-  ),
-  transports: [new winston.transports.Console()]
-});
+// Logger
+function log(message, type = "INFO") {
+  console.log(`[${new Date().toISOString()}] [${type}] ${message}`);
+}
 
-app.post('/docs', async (req, res) => {
-  const { artifact } = req.body;
+app.post("/docs", async (req, res) => {
+  const artifact = req.body.artifact;
 
   if (!artifact || !artifact.url) {
-    return res.status(400).send({ error: 'Artifact URL is required.' });
+    log("Missing artifact or artifact.url", "WARN");
+    return res.status(400).json({ error: "Artifact URL is required" });
   }
 
   try {
-    const state = await validateAndScanDocument(artifact);
-    res.status(200).send({ state });
-  } catch (error) {
-    logger.error("[ERROR] Scanning failed:", error);
-    res.status(500).send({ error: 'Scanning failed' });
+    log(`Received scan request for doc: ${artifact._id}`);
+    const result = await validateAndScanDocument(artifact);
+
+    const payload = {
+      eventCode: "DOC_SCAN_COMPLETE",
+      artifactId: artifact._id,
+      securityState: result.securityState,
+      data: {
+        hasSensitiveData: result.hasSensitiveData,
+        policyCompliant: result.policyCompliant,
+      },
+    };
+
+    if (process.env.API_URL) {
+      await axios.post(`${process.env.API_URL}/webhook/docs`, payload);
+      log(`Sent webhook to ${process.env.API_URL}/webhook/docs`);
+    }
+
+    return res.status(200).json({ state: result.securityState });
+  } catch (err) {
+    log(`Scan failed: ${err.message}`, "ERROR");
+    return res.status(500).json({ error: "Scanning failed" });
   }
 });
 
-app.listen(4000, () => {
-  logger.info("Document scanning service is running on port 4000");
-});
+async function validateAndScanDocument(artifact) {
+  log(`Downloading file from: ${artifact.url}`);
+  const buffer = await downloadFile(artifact.url);
+if (!buffer) {
+  throw new Error("Failed to download file");
+}
+
+console.log("File downloaded successfully, buffer size:", buffer.length);
+
+// Kiểm tra kết quả từ fromBuffer
+const fileType = await fromBuffer(buffer);
+
+const ext = fileType?.ext || "txt";
+console.log("Final file extension:", ext);
+
+if (!["pdf", "docx", "txt"].includes(ext)) {
+  log(`Unsupported file type: ${ext}`, "WARN");
+  return { securityState: "S1", hasSensitiveData: false, policyCompliant: true };
+}
+
+  const tmpFile = tmp.fileSync({ postfix: `.${ext}` });
+  await fs.writeFile(tmpFile.name, buffer);
+
+
+  const fileContent = await fs.readFile(tmpFile.name, "utf8").catch(() => "");
+  log(`Check policy compliance : ${fileContent}`, "INFO");
+  const policyCompliant = checkPolicyCompliance(fileContent);
+  log(`Scan for sentitive data: ${tmpFile.name}`, "INFO");
+  const hasSecrets = await scanForSensitiveData(tmpFile.name);
+
+  tmpFile.removeCallback();
+
+  const securityState = determineSecurityState(hasSecrets, policyCompliant);
+  log(`Security state for doc '${artifact._id}': ${securityState}`);
+
+  return { securityState, hasSensitiveData: hasSecrets, policyCompliant };
+}
+
+function determineSecurityState(hasSecrets, policyCompliant) {
+  if (hasSecrets || !policyCompliant) return "S1";
+  return "S2";
+}
 
 async function downloadFile(url) {
   try {
-    const response = await axios.get(url, { responseType: 'arraybuffer' });
-    const buffer = Buffer.from(response.data);
-    return buffer;
-  } catch (error) {
-    logger.error("Error downloading file:", error);
+    const response = await axios.get(url, { responseType: "arraybuffer" });
+    return Buffer.from(response.data);
+  } catch (err) {
+    log(`Download error: ${err.message}`, "ERROR");
     return null;
   }
 }
 
-async function checkFileType(buffer) {
-  const type = await fileTypeFromBuffer(buffer);
-  return type ? type.ext : 'unknown';
-}
-
-async function scanWithTool(command) {
+function scanWithTool(command) {
   return new Promise((resolve, reject) => {
-    exec(command, (error, stdout, stderr) => {
-      if (error) {
-        logger.error(`[ERROR] Command failed: ${command}`, stderr);
+    exec(command, (err, stdout, stderr) => {
+      if (err) {
+        log(`Tool error: ${stderr}`, "ERROR");
         return reject(stderr);
       }
       resolve(stdout);
@@ -69,37 +116,26 @@ async function scanWithTool(command) {
 
 async function scanForSensitiveData(filePath) {
   try {
-    const [trufflehogOutput, gitleaksOutput] = await Promise.all([
+    const [trufflehog, gitleaks] = await Promise.all([
       scanWithTool(`trufflehog --regex --entropy=False --max_depth=5 ${filePath}`),
-      scanWithTool(`gitleaks detect --source=${filePath} --no-banner`)
     ]);
-    return trufflehogOutput.includes('No secrets found') && gitleaksOutput.includes('No leaks found') ? false : true;
-  } catch (error) {
-    logger.error("[ERROR] Scanning failed:", error);
-    return true;
+
+    return !(trufflehog.includes("No secrets found") && gitleaks.includes("No leaks found"));
+  } catch {
+    return true; // Assume sensitive data if scan fails
   }
 }
 
-async function checkPolicyCompliance(content) {
-  const compliancePolicyKeywords = ['confidential', 'internal use only', 'sensitive'];
-  return !compliancePolicyKeywords.some(keyword => content.includes(keyword));
+function checkPolicyCompliance(content) {
+  const keywords = ["confidential", "internal use only", "sensitive"];
+  return !keywords.some((k) => content.toLowerCase().includes(k));
 }
 
-async function validateAndScanDocument(artifact) {
-  logger.info(`[INFO] Processing document: ${artifact._id}`);
-  const fileBuffer = await downloadFile(artifact.url);
-  if (!fileBuffer) return '[ERROR] Failed to download file';
+// Health check
+app.get("/", (_, res) => {
+  res.send("Docs scanner is running");
+});
 
-  const fileTypeExt = await checkFileType(fileBuffer);
-  if (!['pdf', 'docx', 'txt'].includes(fileTypeExt)) return 'S1';
-
-  const tmpFile = tmp.fileSync({ postfix: `.${fileTypeExt}` });
-  await fs.writeFile(tmpFile.name, fileBuffer);
-
-  const sensitiveDataFound = await scanForSensitiveData(tmpFile.name);
-  const fileContent = await fs.readFile(tmpFile.name, 'utf8');
-  const isCompliant = await checkPolicyCompliance(fileContent);
-
-  tmpFile.removeCallback();
-  return sensitiveDataFound || !isCompliant ? 'S1' : 'S2';
-}
+app.listen(PORT, () => {
+  log(`Docs scanner running on port ${PORT}`);
+});

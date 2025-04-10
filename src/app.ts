@@ -28,7 +28,7 @@ import scannerRoute from "./routes/scanner";
 import changeHistoryRoute from "./routes/changeHistory";
 envVariables.parse(process.env);
 const app = express();
-app.use(express.json());
+app.use(express.json({ limit: '10mb' }));
 app.use(
   cors({
     origin: [

@@ -116,29 +116,16 @@ export async function update(req: Request, res: Response) {
 export async function scanDocumentInDocker(artifact: Artifact) {
   try {
     const response = await axios.post('http://localhost:4000/docs', { artifact });
-    return response.data.state;
   } catch (error) {
     console.error("[ERROR] Failed to scan document:", error);
-    return "S1"; // Default state in case of error
   }
 }
 
-export async function scanSourceCode(artifact: Artifact, accountId: Types.ObjectId | undefined) {
-  const artifactUrl: string = artifact.url ?? "";
-  let check: boolean = true;
-  console.log("[DEBUG] Account ID:", accountId);
-  if (!accountId) {
-    console.error("[ERROR] accountId is undefined!");
-    return "S2"; // Tránh lỗi crash, có thể trả về trạng thái mặc định
+export async function scanSourceCode(artifact: Artifact) {
+  try {
+    await axios.post('http://localhost:5000/source', artifact.url);
+  } catch (error) {
+    console.error("[ERROR] Failed to scan document:", error);
   }
-  if (artifactUrl.includes("github")) {
-    console.log("[INFO] Scanning source github: ", artifact.name);
-    check = await importGithubScanResult(accountId, artifactUrl);
-  } else {
-    console.log("[INFO] Scanning source gitlab: ", artifact.name);
-    check = await importGitlabScanResult(accountId, artifactUrl);
-  }
-  console.log("[SUCCESS] Scanning source finish with state: ", check ? "S1" : "S2");
-  return check ? "S1" : "S2";
 }
 

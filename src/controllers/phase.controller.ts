@@ -18,6 +18,7 @@ import {
   scanDocumentInDocker,
   scanSourceCode
 } from "./scanner.controller"
+import axios from "axios";
 
 // Lấy thông tin chi tiết của một Phase theo ID
 export async function get(req: Request, res: Response) {
@@ -46,7 +47,8 @@ export async function get(req: Request, res: Response) {
 
 export async function createFromTemplate(req: Request, res: Response) {
   const { data, projectName } = req.body;
-  const username = req.user?.username;
+  //const username = req.user?.username;
+  const username = "Github_kann-nguyen";
   const { phases } = data;
 
   console.log(`[INFO] Received request to create from template for project: ${projectName}`);
@@ -73,7 +75,7 @@ export async function createFromTemplate(req: Request, res: Response) {
         action: "create",
         timestamp: Date.now(),
         description: `Account ${req.user?.username} creates a new phase template id ${newTemplateId}`,
-        account: req.user?._id,
+        account: "67f286bd35b165dc0adadac7", //req.user?._id,
       });
 
       console.log(`[INFO] Logged change history for template ID: ${newTemplateId}`);
@@ -252,13 +254,24 @@ export async function scanArtifact(artifact: Artifact, accountId: Types.ObjectId
 
   switch (artifact.type) {
     case "docs":
-      state = await scanDocumentInDocker(artifact);
+      await scanDocumentInDocker(artifact);
       break;
     case "source code":
-      state = await scanSourceCode(artifact, accountId);  // Use the new scanSourceCode function
+     scanSourceCode(artifact);  // Use the new scanSourceCode function
       break;
     case "image":
-      break;
+      let url = `${process.env.IMAGE_SCANNING_URL}/image`;
+        try {
+          axios.get(url, {
+            params: {
+              name: `${artifact.name}:${artifact.version}`,
+            },
+          });
+          console.log(`Image scanning triggered for artifact: ${artifact.name}`);
+        } catch (error) {
+          break;
+        }
+        break;
     case "test report":
       break;
     case "version release":
@@ -273,10 +286,6 @@ export async function scanArtifact(artifact: Artifact, accountId: Types.ObjectId
       console.log("[INFO] Unknown artifact type, assigning default state");
       break;
   }
-
-  artifact.state = state;
-  await ArtifactModel.updateOne({ _id: artifact._id }, { state });
-  console.log("[SUCCESS] Artifact scanned and state assigned:", state);
 }
 
 export async function removeArtifactFromPhase(req: Request, res: Response) {
