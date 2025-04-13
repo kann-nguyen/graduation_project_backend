@@ -57,21 +57,30 @@ export async function create(req: Request, res: Response) {
   try {
     // Lấy thông tin người giao và người nhận công việc
     const assigner = await UserModel.findOne({ account: req.user?._id });
-    const assignee = await UserModel.findById(data.assignee);
+    
+    let assigneeId = data.assignee;
+    // Nếu không có assignee, gợi ý thành viên phù hợp dựa trên threat type
+    if (!assigneeId && data.targetedVulnerability?.length > 0 && assigner?.projectIn?.[0]) {
+      const threatTypes = data.targetedVulnerability.map((vul: any) => vul.severity);
+      const projectId = assigner.projectIn[0].toString(); // ✅ ép kiểu sang string
+      const suggested = await suggestAssigneeFromThreatType(projectId, threatTypes);
+      assigneeId = suggested?._id;
+    }
+
     
     // Tạo ticket mới và liên kết với người giao, người nhận
     const ticket = await TicketModel.create({
       ...data,
-      assignee: assignee?._id,
+      assignee: assigneeId,
       assigner: assigner?._id,
     });
     
-    // Cập nhật danh sách công việc được giao của người nhận
-    await UserModel.findByIdAndUpdate(data.assignee, {
-      $push: {
-        ticketAssigned: ticket._id,
-      },
-    });
+    // // Cập nhật danh sách công việc được giao của người nhận
+    // await UserModel.findByIdAndUpdate(data.assignee, {
+    //   $push: {
+    //     ticketAssigned: ticket._id,
+    //   },
+    // });
     
     // Ghi lại lịch sử thay đổi
     await ChangeHistoryModel.create({
@@ -85,6 +94,20 @@ export async function create(req: Request, res: Response) {
   } catch (error) {
     return res.json(errorResponse(`Internal server error: ${error}`));
   }
+}
+
+
+export async function suggestAssigneeFromThreatType(projectId: string, threatTypes: string[]) {
+  const members = await UserModel.find({ projectIn: projectId });
+
+  for (const member of members) {
+    if (!member.skills) continue;
+    if (threatTypes.some((type) => member.skills.includes(type))) {
+      return member;
+    }
+  }
+
+  return null; // Không tìm thấy phù hợp
 }
 
 /**

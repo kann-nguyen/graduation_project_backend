@@ -24,4 +24,18 @@ export class User {
 
   @prop({ ref: () => Project, default: [] })
   public projectIn!: Ref<Project>[];
+
+  @prop({
+    type: () => [String],
+    enum: [
+      "Spoofing",
+      "Tampering",
+      "Repudiation",
+      "Information Disclosure",
+      "Denial of Service",
+      "Elevation of Privilege",
+    ],
+    default: [],
+  })
+  public skills!: string[];
 }

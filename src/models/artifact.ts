@@ -48,7 +48,7 @@ export class Artifact extends TimeStamps {
   public cpe?: string;
 
   @prop({
-    enum: ["S1", "S2", "S3", "S4", "S5", "S6", "S7"],
+    enum: ["S1", "S2", "S3", "S4", "S5", "S5.2", "S6", "S7"],
     type: String,
   })
   public state!: string;
