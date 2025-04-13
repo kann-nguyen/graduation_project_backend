@@ -5,6 +5,7 @@ import {
   PhaseModel,
   PhaseTemplateModel,
   ProjectModel,
+  ScannerModel,
   ThreatModel,
   TicketModel,
 } from "../models/models";
@@ -361,6 +362,37 @@ export async function createPhaseTemplate(req: Request, res: Response) {
       account: req.user?._id,
     });
     return res.json(successResponse(null, "Phase template created"));
+  } catch (error) {
+    return res.json(errorResponse(`Internal server error: ${error}`));
+  }
+}
+
+export async function addScannerToPhase(req: Request, res: Response) {
+  const { phaseId, scannerId } = req.body;
+
+  try {
+    // Check if the phase exists
+    const phase = await PhaseModel.findById(phaseId);
+    if (!phase) {
+      return res.json(errorResponse("Phase not found"));
+    }
+
+    // Check if the scanner exists
+    const scanner = await ScannerModel.findById(scannerId);
+    if (!scanner) {
+      return res.json(errorResponse("Scanner not found"));
+    }
+
+    // Check if scanner already exists in the phase
+    if (phase.scanners?.includes(scanner._id)) {
+      return res.json(errorResponse("Scanner already added to this phase"));
+    }
+
+    // Add scanner to phase
+    phase.scanners?.push(scanner._id);
+    await phase.save();
+
+    return res.json(successResponse(phase, "Scanner added to phase successfully"));
   } catch (error) {
     return res.json(errorResponse(`Internal server error: ${error}`));
   }

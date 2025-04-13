@@ -20,4 +20,8 @@ export class Scanner {
 
   @prop()
   public config?: Configuration;
+
+   // New property to store the endpoint URL of the running Docker container
+   @prop()
+   public endpoint?: string;
 }

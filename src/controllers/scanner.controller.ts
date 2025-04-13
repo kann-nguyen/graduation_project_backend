@@ -8,8 +8,9 @@ import {
 } from "../utils/generateDockerfile";
 import axios from 'axios';
 import { Artifact } from "../models/artifact";
-import { importGithubScanResult, importGitlabScanResult } from "../utils/vuln";
-import { Types } from "mongoose";
+import { spawn } from "child_process";
+import path from "path";
+import * as fs from "fs/promises";
 
 
 // Get all scanners, optionally filtering by createdBy
@@ -32,31 +33,109 @@ export async function create(req: Request, res: Response) {
   const { data } = req.body;
   try {
     // Check if a scanner with the same name already exists
-    const scanner = await ScannerModel.findOne({ name: data.name });
-    if (scanner) {
+    const existingScanner = await ScannerModel.findOne({ name: data.name });
+    if (existingScanner) {
       return res.json(errorResponse("Scanner already exists"));
     }
-    // Create a new scanner
+    
+    // Create a new scanner document in the database
     const newScanner = await ScannerModel.create({
       name: data.name,
-      createdBy: req.user?.username ? req.user?.username : "admin",
+      createdBy: req.user?.username ?? "Tan Nguyen",
       config: data.config,
     });
-    // Generate Dockerfile based on the scanner config
-    const dockerfile = await generateDockerfile(data.config);
+
+    // Generate Dockerfile based on scanner config
+    const dockerfileContent = await generateDockerfile(data.config);
+    // Save Dockerfile to a temporary file
+    const dockerfilePath = path.join(__dirname, "../temp", `${data.name}-Dockerfile`);
+    await fs.writeFile(dockerfilePath, dockerfileContent, "utf-8");
+
+    // Define unique names for the Docker image and container
+    const imageName = `scanner-${newScanner._id.toString()}`;
+    const containerName = `scanner-container-${newScanner._id.toString()}`;
+    // Optionally decide the host port (it could be dynamic or predetermined)
+    const hostPort = 3000; 
+    const containerPort = 3000; // Adjust if your Dockerfile exposes a different port
+
+    // Build the Docker image
+    await buildDockerImage(dockerfilePath, imageName);
+
+    // Run the Docker container and get its endpoint
+    const endpoint = await runDockerContainer(imageName, containerName, hostPort, containerPort);
+    
+    // Update the scanner document with the endpoint
+    newScanner.endpoint = endpoint;
+    await newScanner.save();
+
     // Log the creation in the change history
     await ChangeHistoryModel.create({
       objectId: newScanner._id,
       action: "create",
       timestamp: Date.now(),
-      description: `Account ${req.user?.username} create a new scanner`,
-      account: req.user?._id ? req.user?._id : "67e2c58c055af0d862a5401c",
+      description: `Account ${req.user?.username ?? "Tan Nguyen"} created a new scanner`,
+      account: req.user?._id ?? "67f286bd35b165dc0adadacf",
     });
-    return res.json(successResponse(dockerfile, "Scanner created"));
+    
+    // Optionally, you can return the endpoint and Dockerfile content as part of the response
+    return res.json(successResponse({ dockerfile: dockerfileContent, endpoint }, "Scanner created and container is running"));
   } catch (error) {
+    console.error("Error creating scanner:", error);
     return res.json(errorResponse(`Internal server error: ${error}`));
   }
 }
+
+export function buildDockerImage(dockerfilePath: string, imageName: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    // Run Docker build command
+    const build = spawn("docker", ["build", "-t", imageName, "-f", dockerfilePath, "."]);
+
+    build.stdout.on("data", (data) => {
+      console.log(`Docker build stdout: ${data}`);
+    });
+    build.stderr.on("data", (data) => {
+      console.error(`Docker build stderr: ${data}`);
+    });
+    build.on("close", (code) => {
+      if (code === 0) {
+        resolve();
+      } else {
+        reject(new Error(`Docker build failed with exit code ${code}`));
+      }
+    });
+  });
+}
+
+export function runDockerContainer(imageName: string, containerName: string, hostPort: number, containerPort: number): Promise<string> {
+  return new Promise((resolve, reject) => {
+    // Run Docker run command in detached mode
+    const run = spawn("docker", [
+      "run",
+      "-d", // detached mode
+      "--name", containerName,
+      "-p", `${hostPort}:${containerPort}`,
+      imageName,
+    ]);
+
+    let containerId = "";
+    run.stdout.on("data", (data) => {
+      containerId += data.toString();
+    });
+    run.stderr.on("data", (data) => {
+      console.error(`Docker run stderr: ${data}`);
+    });
+    run.on("close", (code) => {
+      if (code === 0) {
+        // Assuming the endpoint is on localhost, build endpoint URL string
+        const endpointUrl = `http://localhost:${hostPort}`;
+        resolve(endpointUrl);
+      } else {
+        reject(new Error(`Docker run failed with exit code ${code}`));
+      }
+    });
+  });
+}
+
 
 // Get sample code for vulnerabilities
 export async function getSampleCode(req: Request, res: Response) {
