@@ -1,6 +1,7 @@
 import { Request, Response } from "express";
-import { ChangeHistoryModel, TicketModel, UserModel } from "../models/models";
+import { ArtifactModel, ChangeHistoryModel, ThreatModel, TicketModel, UserModel } from "../models/models";
 import { errorResponse, successResponse } from "../utils/responseFormat";
+import { boolean } from "zod";
 
 /**
  * Lấy tất cả ticket của một dự án
@@ -54,47 +55,106 @@ export async function get(req: Request, res: Response) {
  */
 export async function create(req: Request, res: Response) {
   const { data } = req.body;
+  const user = await UserModel.findById("67f286bd35b165dc0adadacf");
   try {
-    // Lấy thông tin người giao và người nhận công việc
-    const assigner = await UserModel.findOne({ account: req.user?._id });
-    
-    let assigneeId = data.assignee;
-    // Nếu không có assignee, gợi ý thành viên phù hợp dựa trên threat type
-    if (!assigneeId && data.targetedVulnerability?.length > 0 && assigner?.projectIn?.[0]) {
-      const threatTypes = data.targetedVulnerability.map((vul: any) => vul.severity);
-      const projectId = assigner.projectIn[0].toString(); // ✅ ép kiểu sang string
-      const suggested = await suggestAssigneeFromThreatType(projectId, threatTypes);
-      assigneeId = suggested?._id;
+    const assigner = user;
+    if (!assigner) {
+      return res.status(400).json({ success: false, message: "Assigner not found" });
     }
 
-    
-    // Tạo ticket mới và liên kết với người giao, người nhận
+    let assigneeId = data.assignee && data.assignee.trim().length > 0 ? data.assignee : undefined;
+    let submit = true;
+
+    if (!assigneeId && data.targetedThreat && assigner?.projectIn?.[0]) {
+      const threat = await ThreatModel.findById(data.targetedThreat);
+      if (threat) {
+        const projectId = assigner.projectIn[0].toString();
+        const suggested = await suggestAssigneeFromThreatType(projectId, [threat.type]);
+        if (suggested) {
+          assigneeId = suggested._id;
+          submit = false;
+        } 
+      } 
+    }
+
     const ticket = await TicketModel.create({
       ...data,
+      targetedThreat: data.targetedThreat,
       assignee: assigneeId,
-      assigner: assigner?._id,
+      assigner: assigner._id,
     });
-    
-    // // Cập nhật danh sách công việc được giao của người nhận
-    // await UserModel.findByIdAndUpdate(data.assignee, {
-    //   $push: {
-    //     ticketAssigned: ticket._id,
-    //   },
-    // });
-    
-    // Ghi lại lịch sử thay đổi
+
+    if (submit && data.assignee && data.assignee.trim().length > 0) {
+      await UserModel.findByIdAndUpdate(data.assignee, {
+        $push: { ticketAssigned: ticket._id },
+      });
+    }
+
     await ChangeHistoryModel.create({
       objectId: ticket._id,
       action: "create",
       timestamp: ticket.createdAt,
-      account: req.user?._id,
-      description: `${req.user?.username} created this ticket`,
+      account: user._id,
+      description: `${user.name} created this ticket`,
     });
-    return res.json(successResponse(null, "Ticket created successfully"));
+
+    return res.json({ success: true, message: "Ticket created successfully" });
+
+  } catch (error) {
+    return res.json({ success: false, message: `Internal server error: ${error}` });
+  }
+}
+
+
+export async function updateState(req: Request, res: Response) {
+  const { data } = req.body;
+  const ticketId = req.params.id;
+
+  try {
+    const ticket = await TicketModel.findOneAndUpdate(
+      { _id: ticketId },
+      { $set: { status: data.status } },
+      { new: true }
+    );
+
+    if (!ticket) {
+      return res.json(successResponse(null, `Invalid ticket`));
+    }
+
+    switch (ticket.status) {
+      case "Processing":
+        await UserModel.findByIdAndUpdate(ticket.assignee, {
+          $push: {
+            ticketAssigned: ticket._id,
+          },
+        });
+        break;
+
+      case "Submitted":
+        handleTicketSubmitted(ticket._id.toString());
+        break;
+
+      default:
+        console.log(`ℹ️ [updateState] No specific action defined for status: "${ticket.status}"`);
+    }
+
+    // Optional change history (uncomment if needed)
+    /*
+    await ChangeHistoryModel.create({
+      objectId: ticket._id,
+      action: "update",
+      timestamp: new Date(),
+      account: req.user?._id,
+      description: `${req.user?.username} changed status of ticket "${ticket.title}" to "${ticket.status}"`,
+    });
+    console.log(`📝 [updateState] ChangeHistory recorded.`);
+    */
+    return res.json(successResponse(null, "Ticket is changed to: " + ticket.status + " successfully"));
   } catch (error) {
     return res.json(errorResponse(`Internal server error: ${error}`));
   }
 }
+
 
 
 export async function suggestAssigneeFromThreatType(projectId: string, threatTypes: string[]) {
@@ -129,10 +189,7 @@ export async function update(req: Request, res: Response) {
         action: "update",
         timestamp: ticket.updatedAt,
         account: req.user?._id,
-        description:
-          data.status === "closed"
-            ? `${req.user?.username} closed this ticket`
-            : `${req.user?.username} reopened this ticket`,
+        description: `${req.user?.username} change status of this ticket to ` + ticket.status
       });
       return res.json(successResponse(null, "Ticket updated successfully"));
     }
@@ -140,5 +197,31 @@ export async function update(req: Request, res: Response) {
   } catch (error) {
     console.log(error);
     return res.json(errorResponse(`Internal server error: ${error}`));
+  }
+}
+
+
+async function handleTicketSubmitted(ticketId: string) {
+  const ticket = await TicketModel.findById(ticketId).populate("targetArtifact targetedThreat");
+
+  if (!ticket) return;
+
+  const artifact = await ArtifactModel.findById(ticket.artifactId);
+
+  if (!artifact) return;
+
+  // Cộng số lượng threat đã được submit
+  artifact.numberThreatSubmitted = (artifact.numberThreatSubmitted || 0) + 1;
+  await artifact.save();
+
+  // Check tỷ lệ threat đã submit
+  const totalThreat = artifact.threatList?.length || 0;
+  const submittedRatio = (artifact.numberThreatSubmitted || 0) / totalThreat;
+
+  const managerConfigThreshold = 0.5; // Ví dụ Manager yêu cầu xử lý 50% threat
+
+  if (submittedRatio >= managerConfigThreshold) {
+    // Trigger quét lại artifact
+    //const scanResult = await scanArtifact(artifact); // giả lập gọi scanner và trả về danh sách vuln mới
   }
 }

@@ -1,6 +1,6 @@
 import { isDocumentArray } from "@typegoose/typegoose";
 import { Request, Response } from "express";
-import { ArtifactModel, ProjectModel, ThreatModel } from "../models/models";
+import { ArtifactModel, ChangeHistoryModel, ProjectModel, ThreatModel, TicketModel } from "../models/models";
 import { errorResponse, successResponse } from "../utils/responseFormat";
 import { Artifact } from "../models/artifact";
 import { Vulnerability } from "../models/vulnerability";
@@ -213,7 +213,6 @@ let cweToStrideMap:any;
 
 (async () => {
   cweToStrideMap = await loadCweMapping();
-  console.log("Loaded CWE to Threat Mapping:", cweToStrideMap);
 })();
 
 // Collect all potential threat "votes" for a given vulnerability
@@ -307,6 +306,123 @@ export function resolveThreatType(votes: Vote[], artifactType: string): ThreatTy
   return result;
 }
 
+
+
+/**
+ * Kiểm tra threat có phù hợp với vulnerability không. 
+ * Giả sử threat.name chứa định danh (ví dụ cveId) của vulnerability.
+ */
+function threatMatchesVul(threat: any, vuln: any): boolean {
+  return threat.name === vuln.cveId;
+}
+
+/**
+ * Cập nhật trạng thái của ticket liên quan đến threat.
+ * Nếu shouldProcess = true: cập nhật ticket thành "Processing",
+ * nếu không: cập nhật ticket thành "Resolved".
+ */
+async function updateTicketStatusForThreat(threatId: any, isDone: boolean) {
+  // Tìm ticket có liên kết với threat này
+  const ticket = await TicketModel.findOne({ targetedThreat: threatId });
+  if (!ticket) {
+    console.warn(`Không tìm thấy ticket liên kết với threat ${threatId}`);
+    return;
+  }
+  if (ticket.status == "Submitted") {
+    let newStatus = isDone ? "Resolved" : "Processing";
+
+    await TicketModel.findByIdAndUpdate(ticket._id, { $set: { status: newStatus } });
+
+    // Ghi lại lịch sử thay đổi
+    await ChangeHistoryModel.create({
+      objectId: ticket._id,
+      action: "update",
+      timestamp: ticket.createdAt,
+      account: ticket.assigner?._id,
+      description: `Ticket ${ticket.title} được cập nhật thành ${newStatus}`,
+    });
+  }
+  
+}
+
+/**
+ * Xử lý từng threat hiện có trong artifact.threatList:
+ * - Nếu có vulnerability tương ứng trong tempVuls thì cập nhật ticket thành "Processing".
+ * - Nếu không có thì cập nhật ticket thành "Resolved" và xóa threat khỏi DB cũng như khỏi artifact.
+ */
+async function processExistingThreats(artifact: any): Promise<void> {
+  // Đảm bảo threatList đã được populate
+  await artifact.populate("threatList");
+
+  // Lưu danh sách threatId cần loại bỏ sau này
+  const threatsToRemove: any[] = [];
+
+  for (const threat of artifact.threatList) {
+    // Kiểm tra có tồn tại vulnerability tương ứng trong tempVuls
+    const existsInTemp = artifact.tempVuls?.some((vuln: any) => threatMatchesVul(threat, vuln));
+    
+    if (existsInTemp) {
+      // Cập nhật trạng thái ticket của threat thành "Processing"
+      await updateTicketStatusForThreat(threat._id, false);
+    } else {
+      // Cập nhật trạng thái ticket của threat thành "Resolved"
+      await updateTicketStatusForThreat(threat._id, true);
+
+      // Đánh dấu threat này để xóa
+      threatsToRemove.push(threat._id);
+      console.log(`Threat ${threat._id} bị xóa vì không tìm thấy vulnerability tương ứng.`);
+    }
+  }
+
+  // Loại bỏ các threat đã bị xóa khỏi artifact.threatList
+  artifact.threatList = artifact.threatList.filter(
+    (t: any) => !threatsToRemove.includes(t._id.toString())
+  );
+}
+
+/**
+ * Xử lý danh sách vulnerability mới từ artifact.tempVuls:
+ * Với mỗi vulnerability trong tempVuls, nếu nó không có trong artifact.vulnerabilityList,
+ * thì tạo threat mới và thêm vào artifact.threatList.
+ */
+async function processNewVulnerabilities(artifact: any): Promise<void> {
+  for (const newVul of artifact.tempVuls || []) {
+    // Kiểm tra nếu vulnerability này chưa tồn tại trong artifact.vulnerabilityList
+    const exists = artifact.vulnerabilityList?.some(
+      (oldVul: any) => oldVul.cveId === newVul.cveId
+    );
+    if (!exists) {
+      const threatData = createThreatFromVuln(newVul, artifact.type);
+      const createdThreat = await ThreatModel.create(threatData);
+      artifact.threatList.push(createdThreat._id);
+      console.log(`Threat mới được tạo cho vulnerability ${newVul.cveId}`);
+    }
+  }
+}
+
+/**
+ * Hàm cập nhật artifact sau khi scan:
+ * 1. Xử lý threat hiện có
+ * 2. Xử lý các vulnerability mới (tempVuls)
+ * 3. Cập nhật artifact.vulnerabilityList từ tempVuls và lưu artifact.
+ */
+export async function updateArtifactAfterScan(artifact: any): Promise<void> {
+  try {
+    // 1. Xử lý threat hiện có trong artifact
+    await processExistingThreats(artifact);
+
+    // 2. Xử lý tempVuls: tạo threat mới cho vulnerability không có trong danh sách cũ
+    await processNewVulnerabilities(artifact);
+
+    // 3. Gán lại vulnerabilityList bằng tempVuls và lưu artifact
+    artifact.vulnerabilityList = artifact.tempVuls || [];
+    await artifact.save();
+    console.log(`Artifact ${artifact._id} đã được cập nhật với vulnerabilityList mới từ tempVuls.`);
+  } catch (error) {
+    console.error("Lỗi khi cập nhật artifact sau scan:", error);
+    throw error;
+  }
+}
 
 
 

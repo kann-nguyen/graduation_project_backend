@@ -3,6 +3,7 @@ import { Base, TimeStamps } from "@typegoose/typegoose/lib/defaultClasses";
 import { User } from "./user";
 import { Vulnerability } from "./vulnerability";
 import { ChangeHistoryModel, UserModel } from "./models";
+import { Threat } from "./threat";
 export interface Ticket extends Base {}
 @post<Ticket>("deleteMany", async function (res, next) {
   // Remove tickets from UserModel's ticketAssigned field
@@ -44,9 +45,12 @@ export class Ticket extends TimeStamps {
   })
   public priority!: string;
 
-  @prop({ type: () => Vulnerability, default: [], required: true })
-  public targetedVulnerability!: ArraySubDocumentType<Vulnerability>[];
+  @prop({ ref: () => Threat, required: true })
+  public targetedThreat!: Ref<Threat>;
 
   @prop({ required: true, type: String })
   public projectName!: string;
+
+  @prop({ required: true, type: String })
+  public artifactId!: string;
 }

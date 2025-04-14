@@ -8,7 +8,7 @@ export interface Artifact extends Base {}
 @post<Artifact>("findOneAndDelete", async function (this, doc) {
   doc.vulnerabilityList?.forEach(async (vuln) => {
     await TicketModel.deleteMany({
-      targetedVulnerability: vuln,
+      targetedThreat: vuln,
     });
   });
 })
@@ -52,4 +52,10 @@ export class Artifact extends TimeStamps {
     type: String,
   })
   public state!: string;
+
+  @prop({ default: 0 })
+  public numberThreatSubmitted?: number; // số lượng threat đã xử lý (submit)
+
+  @prop({ select: false }) // không lưu trong DB
+  public tempVuls?: ArraySubDocumentType<Vulnerability>[]; // danh sách vuln tạm thời từ scanner
 }
