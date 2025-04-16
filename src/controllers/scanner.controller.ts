@@ -28,47 +28,39 @@ export async function getAll(req: Request, res: Response) {
   }
 }
 
-// Create a new scanner with a unique name and generate a Dockerfile
+/**
+ * Create a scanner document, generate and save a Dockerfile, return file path.
+ */
 export async function create(req: Request, res: Response) {
   const { data } = req.body;
+
   try {
-    // Check if a scanner with the same name already exists
+    console.log("[create] Checking if scanner with the same name exists...");
+
     const existingScanner = await ScannerModel.findOne({ name: data.name });
     if (existingScanner) {
+      console.log("[create] Scanner already exists");
       return res.json(errorResponse("Scanner already exists"));
     }
-    
-    // Create a new scanner document in the database
+
+    console.log("[create] Creating new scanner document in the database...");
     const newScanner = await ScannerModel.create({
       name: data.name,
       createdBy: req.user?.username ?? "Tan Nguyen",
       config: data.config,
     });
 
-    // Generate Dockerfile based on scanner config
+    console.log("[create] Generating Dockerfile from scanner config...");
     const dockerfileContent = await generateDockerfile(data.config);
-    // Save Dockerfile to a temporary file
-    const dockerfilePath = path.join(__dirname, "../temp", `${data.name}-Dockerfile`);
+
+    const tempDir = path.join(__dirname, "../temp");
+    await fs.mkdir(tempDir, { recursive: true }); // Ensure temp dir exists
+
+    const dockerfilePath = path.join(tempDir, `${newScanner.name.replace(/\s+/g, "-")}-Dockerfile`);
+    console.log(`[create] Saving Dockerfile to: ${dockerfilePath}`);
     await fs.writeFile(dockerfilePath, dockerfileContent, "utf-8");
 
-    // Define unique names for the Docker image and container
-    const imageName = `scanner-${newScanner._id.toString()}`;
-    const containerName = `scanner-container-${newScanner._id.toString()}`;
-    // Optionally decide the host port (it could be dynamic or predetermined)
-    const hostPort = 3000; 
-    const containerPort = 3000; // Adjust if your Dockerfile exposes a different port
-
-    // Build the Docker image
-    await buildDockerImage(dockerfilePath, imageName);
-
-    // Run the Docker container and get its endpoint
-    const endpoint = await runDockerContainer(imageName, containerName, hostPort, containerPort);
-    
-    // Update the scanner document with the endpoint
-    newScanner.endpoint = endpoint;
-    await newScanner.save();
-
-    // Log the creation in the change history
+    console.log("[create] Logging creation in change history...");
     await ChangeHistoryModel.create({
       objectId: newScanner._id,
       action: "create",
@@ -76,65 +68,100 @@ export async function create(req: Request, res: Response) {
       description: `Account ${req.user?.username ?? "Tan Nguyen"} created a new scanner`,
       account: req.user?._id ?? "67f286bd35b165dc0adadacf",
     });
-    
-    // Optionally, you can return the endpoint and Dockerfile content as part of the response
-    return res.json(successResponse({ dockerfile: dockerfileContent, endpoint }, "Scanner created and container is running"));
+
+    console.log("[create] Returning Dockerfile path...");
+    return res.json(
+      successResponse(
+        {
+          dockerfilePath,
+          dockerfile: dockerfileContent,
+        },
+        "Scanner created. Dockerfile saved in temp directory."
+      )
+    );
   } catch (error) {
     console.error("Error creating scanner:", error);
     return res.json(errorResponse(`Internal server error: ${error}`));
   }
 }
 
-export function buildDockerImage(dockerfilePath: string, imageName: string): Promise<void> {
-  return new Promise((resolve, reject) => {
-    // Run Docker build command
-    const build = spawn("docker", ["build", "-t", imageName, "-f", dockerfilePath, "."]);
 
-    build.stdout.on("data", (data) => {
-      console.log(`Docker build stdout: ${data}`);
-    });
-    build.stderr.on("data", (data) => {
-      console.error(`Docker build stderr: ${data}`);
-    });
-    build.on("close", (code) => {
-      if (code === 0) {
-        resolve();
-      } else {
-        reject(new Error(`Docker build failed with exit code ${code}`));
-      }
-    });
-  });
-}
+// /**
+//  * Builds a Docker image using the specified Dockerfile.
+//  * @param dockerfilePath - The path to the Dockerfile.
+//  * @param imageName - The tag/name for the Docker image.
+//  * @returns A promise that resolves when the image build is successful.
+//  */
+// export function buildDockerImage(dockerfilePath: string, imageName: string): Promise<void> {
+//   console.log(`[buildDockerImage] Starting Docker build for image: ${imageName} using Dockerfile at: ${dockerfilePath}`);
+//   return new Promise((resolve, reject) => {
+//     // Spawn a child process to run the Docker build command.
+//     const build = spawn("docker", ["build", "-t", imageName, "-f", dockerfilePath, "."]);
 
-export function runDockerContainer(imageName: string, containerName: string, hostPort: number, containerPort: number): Promise<string> {
-  return new Promise((resolve, reject) => {
-    // Run Docker run command in detached mode
-    const run = spawn("docker", [
-      "run",
-      "-d", // detached mode
-      "--name", containerName,
-      "-p", `${hostPort}:${containerPort}`,
-      imageName,
-    ]);
+//     build.stdout.on("data", (data) => {
+//       console.log(`[buildDockerImage] stdout: ${data}`);
+//     });
 
-    let containerId = "";
-    run.stdout.on("data", (data) => {
-      containerId += data.toString();
-    });
-    run.stderr.on("data", (data) => {
-      console.error(`Docker run stderr: ${data}`);
-    });
-    run.on("close", (code) => {
-      if (code === 0) {
-        // Assuming the endpoint is on localhost, build endpoint URL string
-        const endpointUrl = `http://localhost:${hostPort}`;
-        resolve(endpointUrl);
-      } else {
-        reject(new Error(`Docker run failed with exit code ${code}`));
-      }
-    });
-  });
-}
+//     build.stderr.on("data", (data) => {
+//       console.error(`[buildDockerImage] stderr: ${data}`);
+//     });
+
+//     build.on("close", (code) => {
+//       if (code === 0) {
+//         console.log(`[buildDockerImage] Docker image ${imageName} built successfully.`);
+//         resolve();
+//       } else {
+//         console.error(`[buildDockerImage] Docker build failed with exit code ${code}`);
+//         reject(new Error(`Docker build failed with exit code ${code}`));
+//       }
+//     });
+//   });
+// }
+
+// /**
+//  * Runs a Docker container from the specified image and returns the endpoint URL.
+//  * @param imageName - The name of the Docker image to run.
+//  * @param containerName - The name for the running Docker container.
+//  * @param hostPort - The port on the host machine.
+//  * @param containerPort - The port exposed by the container.
+//  * @returns A promise that resolves to the endpoint URL string.
+//  */
+// export function runDockerContainer(imageName: string, containerName: string, hostPort: number, containerPort: number): Promise<string> {
+//   console.log(`[runDockerContainer] Starting Docker container '${containerName}' from image '${imageName}'.`);
+//   return new Promise((resolve, reject) => {
+//     // Spawn a child process to run the Docker run command in detached mode.
+//     const run = spawn("docker", [
+//       "run",
+//       "-d", // Run container in detached mode.
+//       "--name", containerName,
+//       "-p", `${hostPort}:${containerPort}`,
+//       imageName,
+//     ]);
+
+//     let containerId = "";
+//     run.stdout.on("data", (data) => {
+//       containerId += data.toString();
+//       console.log(`[runDockerContainer] stdout: ${data}`);
+//     });
+
+//     run.stderr.on("data", (data) => {
+//       console.error(`[runDockerContainer] stderr: ${data}`);
+//     });
+
+//     run.on("close", (code) => {
+//       if (code === 0) {
+//         // Trim the container ID received and build the endpoint URL.
+//         containerId = containerId.trim();
+//         console.log(`[runDockerContainer] Docker container '${containerName}' started successfully with ID: ${containerId}`);
+//         const endpointUrl = `http://localhost:${hostPort}`;
+//         resolve(endpointUrl);
+//       } else {
+//         console.error(`[runDockerContainer] Docker run failed with exit code ${code}`);
+//         reject(new Error(`Docker run failed with exit code ${code}`));
+//       }
+//     });
+//   });
+// }
 
 
 // Get sample code for vulnerabilities

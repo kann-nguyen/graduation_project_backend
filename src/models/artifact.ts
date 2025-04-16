@@ -1,4 +1,4 @@
-import { ArraySubDocumentType, mongoose, post, prop } from "@typegoose/typegoose";
+import { ArraySubDocumentType, mongoose, post, prop, Ref } from "@typegoose/typegoose";
 import { Base, TimeStamps } from "@typegoose/typegoose/lib/defaultClasses";
 import { Threat } from "./threat";
 import { Vulnerability } from "./vulnerability";
@@ -52,6 +52,9 @@ export class Artifact extends TimeStamps {
     type: String,
   })
   public state!: string;
+
+  @prop({ required: true })
+  public projectId!: mongoose.Types.ObjectId;
 
   @prop({ default: 0 })
   public numberThreatSubmitted?: number; // số lượng threat đã xử lý (submit)

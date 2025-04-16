@@ -62,6 +62,11 @@ export async function importVulnToImage(req: Request, res: Response) {
         vulnerabilityList: data,
       },
     });
+
+    for (const artifact of artifacts) {
+      generateAndAttachThreats(artifact._id);
+    }
+
   } catch (error) {
     console.error("Error during importVulnToImage:", error);
     return res.json(errorResponse(`Internal server error: ${error}`));

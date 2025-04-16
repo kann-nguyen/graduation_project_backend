@@ -7,6 +7,7 @@ import { Vulnerability } from "../models/vulnerability";
 import { Threat } from "../models/threat";
 import path from "path";
 import * as fs from "fs/promises";
+import { autoCreateTicketFromThreat } from "./ticket.controller";
 
 // Lấy tất cả artifacts thuộc về một project cụ thể
 export async function getAll(req: Request, res: Response) {
@@ -95,7 +96,7 @@ export async function update(req: Request, res: Response) {
 /**
  * Từ artifact, sinh các threat dựa trên vulnerabilityList
  */
-export async function generateAndAttachThreats(req: Request, res: Response) {
+export async function generateAndAttachThreats1(req: Request, res: Response) {
   const artifactId = req.params.id;
 
   try {
@@ -142,6 +143,52 @@ export async function generateAndAttachThreats(req: Request, res: Response) {
   } catch (error) {
     console.error(error);
     return res.status(500).json({ message: "An error occurred while generating threats." });
+  }
+}
+
+export async function generateAndAttachThreats(artifactId: any) {
+  try {
+    // Step 1: Fetch the artifact by ID
+    const artifact = await ArtifactModel.findById(artifactId);
+    if (!artifact) {
+      return;
+    }
+
+    // Step 2: Check if there are any vulnerabilities associated with the artifact
+    if (!artifact.vulnerabilityList || artifact.vulnerabilityList.length === 0) {
+      return;
+    }
+
+    console.log(`🚧 Generating threats for artifact: ${artifact.name}`);
+
+    // Initialize threat list if not already present
+    artifact.threatList = artifact.threatList || [];
+
+    // Step 3: Loop through vulnerabilities and create threats
+    for (const vuln of artifact.vulnerabilityList) {
+      const threatData = createThreatFromVuln(vuln, artifact.type);
+      console.log(`⚙️ Created threat from CVE ${vuln.cveId}:`, threatData);
+
+      // Create a new threat and save it to the database
+      const newThreat = await ThreatModel.create({
+        ...threatData,
+      });
+
+      // Step 4: Update artifact's threat list
+      artifact.threatList.push(newThreat._id);
+
+      autoCreateTicketFromThreat(artifactId, newThreat._id);
+    }
+
+    // Step 5: Save updated artifact with attached threats
+    await artifact.save();
+
+    // Respond with success
+    console.log(`✅ Successfully saved ${artifact.threatList.length} threats for artifact "${artifact.name}"`);
+
+  } catch (error) {
+    console.error(error);
+    return;
   }
 }
 

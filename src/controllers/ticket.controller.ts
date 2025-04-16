@@ -1,5 +1,5 @@
 import { Request, Response } from "express";
-import { ArtifactModel, ChangeHistoryModel, ThreatModel, TicketModel, UserModel } from "../models/models";
+import { ArtifactModel, ChangeHistoryModel, ProjectModel, ThreatModel, TicketModel, UserModel } from "../models/models";
 import { errorResponse, successResponse } from "../utils/responseFormat";
 import { boolean } from "zod";
 
@@ -73,8 +73,8 @@ export async function create(req: Request, res: Response) {
         if (suggested) {
           assigneeId = suggested._id;
           submit = false;
-        } 
-      } 
+        }
+      }
     }
 
     const ticket = await TicketModel.create({
@@ -105,15 +105,46 @@ export async function create(req: Request, res: Response) {
   }
 }
 
+export async function autoCreateTicketFromThreat(artifactId: any, threatId: any) {
+  try {
+    const threat = await ThreatModel.findById(threatId);
+    const artifact = await ArtifactModel.findById(artifactId);
+    if (threat && artifact) {
+      const suggested = await suggestAssigneeFromThreatType(artifact.projectId.toString(), [threat.type]);
+      // Creating the ticket automatically with suggested assignee (if any)
+      const ticket = await TicketModel.create({
+        title: `Ticket for Threat ${threat.name}`,
+        description: `Automatically generated ticket for ${threat.name} threats.`,
+        assignee: suggested,  // Assignee determined above (can be system user or suggested)
+        assigner: null, // System assigner
+        artifact: artifactId,   // Associated artifact
+        threats: threatId,     // Associated threats
+        status: "Not accepted",         // Default status is OPEN
+        priority: "low",     // Default priority
+      });
+    }
+
+
+  } catch (error) {
+    return;
+  }
+}
+
 
 export async function updateState(req: Request, res: Response) {
   const { data } = req.body;
   const ticketId = req.params.id;
+  const user = await UserModel.findById("67f286bd35b165dc0adadacf");
 
   try {
     const ticket = await TicketModel.findOneAndUpdate(
       { _id: ticketId },
-      { $set: { status: data.status } },
+      {
+        $set: {
+          status: data.status,
+          assigner: user
+        }
+      },
       { new: true }
     );
 

@@ -192,9 +192,20 @@ export async function getTemplates(req: Request, res: Response) {
 export async function addArtifactToPhase(req: Request, res: Response) {
   const { id } = req.params;
   const { data } = req.body;
-  const { cpe, threatList } = data;
+  const { cpe, threatList ,projectName } = data;
 
   console.log("[INFO] Received request to add artifact to phase", { id, data });
+  // ✅ Gán projectId từ projectName
+  try {
+    const project = await ProjectModel.findOne({ name: projectName });
+    if (!project) {
+      return res.json(errorResponse(`Project with name '${projectName}' not found`));
+    }
+    data.projectId = project._id;
+  } catch (err) {
+    console.error("[ERROR] Failed to find project by name", err);
+    return res.json(errorResponse("Failed to resolve project name"));
+  }
 
   // Fetch vulnerabilities and threats before creating artifact
   if (cpe) {
@@ -236,7 +247,7 @@ export async function addArtifactToPhase(req: Request, res: Response) {
     // ✅ Bắt đầu scan ở background
     setImmediate(async () => {
       try {
-        await scanArtifact(artifact, req.user?._id);
+        await scanArtifact(artifact);
       } catch (error) {
         console.error("[ERROR] Scanning failed:", error);
       }
@@ -249,7 +260,7 @@ export async function addArtifactToPhase(req: Request, res: Response) {
 }
 
 
-export async function scanArtifact(artifact: Artifact, accountId: Types.ObjectId | undefined) {
+export async function scanArtifact(artifact: Artifact) {
   console.log("[INFO] Scanning artifact", artifact.name);
   let state = "S1"; // Default state
 
@@ -258,7 +269,7 @@ export async function scanArtifact(artifact: Artifact, accountId: Types.ObjectId
       await scanDocumentInDocker(artifact);
       break;
     case "source code":
-     scanSourceCode(artifact);  // Use the new scanSourceCode function
+      await scanSourceCode(artifact);  // Use the new scanSourceCode function
       break;
     case "image":
       let url = `${process.env.IMAGE_SCANNING_URL}/image`;

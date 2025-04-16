@@ -23,7 +23,7 @@ export class Ticket extends TimeStamps {
   @prop({ required: true, ref: () => User })
   public assignee!: Ref<User>;
 
-  @prop({ required: true, ref: () => User })
+  @prop({ref: () => User })
   public assigner!: Ref<User>;
 
   @prop({
