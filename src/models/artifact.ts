@@ -6,9 +6,9 @@ import { TicketModel } from "./models";
 import { Types } from "mongoose";
 export interface Artifact extends Base {}
 @post<Artifact>("findOneAndDelete", async function (this, doc) {
-  doc.vulnerabilityList?.forEach(async (vuln) => {
+  doc.threatList?.forEach(async (threat) => {
     await TicketModel.deleteMany({
-      targetedThreat: vuln,
+      targetedThreat: threat,
     });
   });
 })

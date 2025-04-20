@@ -119,7 +119,6 @@ export async function generateAndAttachThreats1(req: Request, res: Response) {
     // Step 3: Loop through vulnerabilities and create threats
     for (const vuln of artifact.vulnerabilityList) {
       const threatData = createThreatFromVuln(vuln, artifact.type);
-      console.log(`⚙️ Created threat from CVE ${vuln.cveId}:`, threatData);
 
       // Create a new threat and save it to the database
       const newThreat = await ThreatModel.create({
@@ -167,7 +166,6 @@ export async function generateAndAttachThreats(artifactId: any) {
     // Step 3: Loop through vulnerabilities and create threats
     for (const vuln of artifact.vulnerabilityList) {
       const threatData = createThreatFromVuln(vuln, artifact.type);
-      console.log(`⚙️ Created threat from CVE ${vuln.cveId}:`, threatData);
 
       // Create a new threat and save it to the database
       const newThreat = await ThreatModel.create({

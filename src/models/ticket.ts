@@ -1,30 +1,35 @@
 import { ArraySubDocumentType, post, prop, Ref } from "@typegoose/typegoose";
 import { Base, TimeStamps } from "@typegoose/typegoose/lib/defaultClasses";
 import { User } from "./user";
-import { Vulnerability } from "./vulnerability";
 import { ChangeHistoryModel, UserModel } from "./models";
 import { Threat } from "./threat";
+
 export interface Ticket extends Base {}
+
 @post<Ticket>("deleteMany", async function (res, next) {
-  // Remove tickets from UserModel's ticketAssigned field
-  await UserModel.updateMany({
-    $pull: {
-      ticketAssigned: {
-        $in: res._id,
+  try {
+    // Remove tickets from UserModel's ticketAssigned field
+    await UserModel.updateMany({
+      $pull: {
+        ticketAssigned: {
+          $in: res._id,
+        },
       },
-    },
-  });
-  await ChangeHistoryModel.deleteMany({ objectId: res._id });
+    });
+    await ChangeHistoryModel.deleteMany({ objectId: res._id });
+  } catch (error) {
+    console.error(`❌ Error in deleteMany hook for Ticket: ${error}`);
+  }
 })
 export class Ticket extends TimeStamps {
   @prop({ required: true, type: String })
   public title!: string;
 
-  @prop({ required: true, ref: () => User })
-  public assignee!: Ref<User>;
+  @prop({ ref: () => User, required: false }) // Make assignee optional
+  public assignee?: Ref<User>;
 
-  @prop({ref: () => User })
-  public assigner!: Ref<User>;
+  @prop({ ref: () => User })
+  public assigner?: Ref<User>;
 
   @prop({
     required: true,
@@ -48,9 +53,9 @@ export class Ticket extends TimeStamps {
   @prop({ ref: () => Threat, required: true })
   public targetedThreat!: Ref<Threat>;
 
-  @prop({ required: true, type: String })
+  @prop({ required: true, type: String, validate: (v: string) => v.trim().length > 0 })
   public projectName!: string;
 
-  @prop({ required: true, type: String })
+  @prop({ required: true, type: String, validate: (v: string) => v.trim().length > 0 })
   public artifactId!: string;
 }

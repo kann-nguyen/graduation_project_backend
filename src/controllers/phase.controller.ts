@@ -8,6 +8,7 @@ import {
   ScannerModel,
   ThreatModel,
   TicketModel,
+  UserModel,
 } from "../models/models";
 import { errorResponse, successResponse } from "../utils/responseFormat";
 import {
@@ -192,20 +193,14 @@ export async function getTemplates(req: Request, res: Response) {
 export async function addArtifactToPhase(req: Request, res: Response) {
   const { id } = req.params;
   const { data } = req.body;
-  const { cpe, threatList ,projectName } = data;
+  const { cpe, threatList} = data;
+  const user = await UserModel.findById("67f286bd35b165dc0adadacf");
 
-  console.log("[INFO] Received request to add artifact to phase", { id, data });
-  // ✅ Gán projectId từ projectName
-  try {
-    const project = await ProjectModel.findOne({ name: projectName });
-    if (!project) {
-      return res.json(errorResponse(`Project with name '${projectName}' not found`));
-    }
-    data.projectId = project._id;
-  } catch (err) {
-    console.error("[ERROR] Failed to find project by name", err);
-    return res.json(errorResponse("Failed to resolve project name"));
+  if (!user) {
+    return res.json(errorResponse("User not found"));
   }
+  // ✅ Lấy projectName từ user.projectIn[0]
+  data.projectId = user.projectIn[0].toString();
 
   // Fetch vulnerabilities and threats before creating artifact
   if (cpe) {
@@ -224,15 +219,12 @@ export async function addArtifactToPhase(req: Request, res: Response) {
       data.threatList = threats;
     } catch (error) {
       data.threatList = [];
-      console.error("[ERROR] Failed to fetch threats", error);
     }
   }
 
   try {
-    console.log("[INFO] Creating new artifact", data);
     data.state = "S1"; // ✅ Gán state ban đầu là S1
     const artifact = await ArtifactModel.create(data);
-    console.log("[SUCCESS] Artifact created with initial state S1", artifact);
 
     // ✅ Thêm artifact vào phase ngay lập tức
     await PhaseModel.findByIdAndUpdate(
