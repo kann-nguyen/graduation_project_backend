@@ -1,5 +1,5 @@
 import { Request, Response } from "express";
-import { ArtifactModel, ChangeHistoryModel, ProjectModel, ThreatModel, TicketModel, UserModel } from "../models/models";
+import { AccountModel, ArtifactModel, ChangeHistoryModel, ProjectModel, ThreatModel, TicketModel, UserModel } from "../models/models";
 import { errorResponse, successResponse } from "../utils/responseFormat";
 import { boolean } from "zod";
 
@@ -11,15 +11,43 @@ import { boolean } from "zod";
  */
 export async function getAll(req: Request, res: Response) {
   const { projectName } = req.query;
+  const userId = req.user?._id;
+
   if (!projectName) {
+    console.log('❌ No project name provided');
     return res.json(errorResponse("Project name is required"));
   }
+
   try {
-    const tickets = await TicketModel.find({ projectName }).populate({
+    // Get the user and their account to check role
+    const user = await UserModel.findOne({ account: userId });
+    if (!user) {
+      return res.json(errorResponse("User not found"));
+    }
+
+    const account = await AccountModel.findById(user.account);
+    if (!account) {
+      return res.json(errorResponse("Account not found"));
+    }
+
+    // Create base query for tickets
+    let query: { projectName: string; assignee?: string; status?: { $nin?: string[] } } = { 
+      projectName: projectName as string 
+    };
+    
+    // If user is not a manager, only show tickets assigned to them and exclude completed statuses
+    if (account.role !== "manager") {
+      query.assignee = user._id.toString();
+      query.status = { $nin: ["Not accepted", "Resolved"] };
+    }
+
+    const tickets = await TicketModel.find(query).populate({
       path: "assignee assigner",
     });
+
     return res.json(successResponse(tickets, "Tickets fetched successfully"));
   } catch (error) {
+    console.error('❌ Error fetching tickets:', error);
     return res.json(errorResponse(`Internal server error: ${error}`));
   }
 }
@@ -35,7 +63,7 @@ export async function get(req: Request, res: Response) {
   const { id } = req.params;
   try {
     const ticket = await TicketModel.findById(id).populate({
-      path: "assignee assigner targetedVulnerability",
+      path: "assignee assigner targetedThreat",
     });
     if (ticket) {
       return res.json(successResponse(ticket, "Ticket fetched successfully"));
@@ -55,8 +83,16 @@ export async function get(req: Request, res: Response) {
  */
 export async function create(req: Request, res: Response) {
   const { data } = req.body;
+  const userId = req.user?._id;
   try {
-    const user = await UserModel.findById("67f286bd35b165dc0adadacf");
+    let user = await UserModel.findById("68079a11ae6eca7a108312ce");
+    if(!userId) {
+      user = await UserModel.findById(userId);
+    }
+
+    if (!user) {
+      return res.json(errorResponse("User not found"));
+    }
     if (!user) {
       return res.status(400).json({ success: false, message: "Assigner not found" });
     }
@@ -64,7 +100,7 @@ export async function create(req: Request, res: Response) {
     let assigneeId = data.assignee && data.assignee.trim().length > 0 ? data.assignee : undefined;
     let submit = true;
 
-    if (!assigneeId && data.targetedThreat && user.projectIn?.[0]) {
+    if (!assigneeId && data.targetedThreat && 'projectIn' in user && user.projectIn?.[0]) {
       const threat = await ThreatModel.findById(data.targetedThreat);
       if (threat) {
         const projectId = user.projectIn[0].toString();
@@ -94,7 +130,7 @@ export async function create(req: Request, res: Response) {
       action: "create",
       timestamp: ticket.createdAt,
       account: user._id,
-      description: `${user.name} created this ticket`,
+      description: `created this ticket`,
     });
 
     return res.json({ success: true, message: "Ticket created successfully" });
@@ -157,24 +193,67 @@ export async function autoCreateTicketFromThreat(artifactId: any, threatId: any)
 export async function updateState(req: Request, res: Response) {
   const { data } = req.body;
   const ticketId = req.params.id;
-  const user = await UserModel.findById("67f286bd35b165dc0adadacf");
+  const userId = req.user?._id
 
   try {
+    // Find the ticket first to check current status
+    const currentTicket = await TicketModel.findById(ticketId);
+
+    if (!currentTicket) {
+      console.log('❌ Ticket not found');
+      return res.json(errorResponse("Ticket not found"));
+    }
+
+    // Get the user making the request
+    const user = await UserModel.findOne( {
+      account: userId,
+    });
+
+    if (!user) {
+      console.log('❌ User not found');
+      return res.json(errorResponse("User not found"));
+    }
+
+    const account = await AccountModel.findById(user.account);
+
+    if (!account) {
+      console.log('❌ Account not found');
+      return res.json(errorResponse("Account not found"));
+    }
+
+    if (currentTicket.status === "Not accepted" && data.status === "Processing") {
+      if (account.role !== "manager") {
+        console.log('❌ Permission denied: Non-manager attempting to process ticket');
+        return res.json(errorResponse("Only managers can change ticket to Processing state"));
+      }
+    } else if (currentTicket.status === "Processing" && data.status === "Submitted") {
+      if (currentTicket.assignee?.toString() !== user._id.toString()) {
+        console.log('❌ Permission denied: Non-assignee attempting to submit ticket');
+        return res.json(errorResponse("Only the assigned user can change ticket to Submitted state"));
+      }
+    } else {
+      console.log('❌ Invalid status transition attempted');
+      return res.json(errorResponse("Invalid status transition"));
+    }
+
+    // Update the ticket if permissions check passed
     const ticket = await TicketModel.findOneAndUpdate(
       { _id: ticketId },
       {
         $set: {
           status: data.status,
-          assigner: user
+          assigner: user._id
         }
       },
       { new: true }
     );
 
     if (!ticket) {
-      return res.json(successResponse(null, `Invalid ticket`));
+      console.log('❌ Ticket not found after update');
+      return res.json(errorResponse("Ticket not found after update"));
     }
 
+    // Handle post-update actions
     switch (ticket.status) {
       case "Processing":
         await UserModel.findByIdAndUpdate(ticket.assignee, {
@@ -185,26 +264,14 @@ export async function updateState(req: Request, res: Response) {
         break;
 
       case "Submitted":
-        handleTicketSubmitted(ticket._id.toString());
+        await handleTicketSubmitted(ticket._id.toString());
         break;
-
-      default:
-        console.log(`ℹ️ [updateState] No specific action defined for status: "${ticket.status}"`);
     }
 
-    // Optional change history (uncomment if needed)
-    /*
-    await ChangeHistoryModel.create({
-      objectId: ticket._id,
-      action: "update",
-      timestamp: new Date(),
-      account: req.user?._id,
-      description: `${req.user?.username} changed status of ticket "${ticket.title}" to "${ticket.status}"`,
-    });
-    console.log(`📝 [updateState] ChangeHistory recorded.`);
-    */
-    return res.json(successResponse(null, "Ticket is changed to: " + ticket.status + " successfully"));
+    console.log('✅ Update completed successfully');
+    return res.json(successResponse(null, `Ticket status changed to: ${ticket.status} successfully`));
   } catch (error) {
+    console.error('❌ Error updating ticket state:', error);
     return res.json(errorResponse(`Internal server error: ${error}`));
   }
 }
@@ -270,7 +337,7 @@ export async function suggestAssigneeFromThreatType(projectId: string, threatTyp
 
 
   async function handleTicketSubmitted(ticketId: string) {
-    const ticket = await TicketModel.findById(ticketId).populate("targetArtifact targetedThreat");
+    const ticket = await TicketModel.findById(ticketId).populate("artifactId targetedThreat");
 
     if (!ticket) return;
 

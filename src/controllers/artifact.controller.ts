@@ -264,8 +264,6 @@ let cweToStrideMap:any;
 export function getVotes(vuln: Vulnerability): Vote[] {
   const votes: Vote[] = [];
 
-  console.log("🔍 Analyzing Vulnerability:", vuln);
-
   // === (1) CWE Mapping ===
   for (const cwe of vuln.cwes || []) {
     const mappedType = cweToStrideMap[cwe] ?? "Spoofing";
@@ -275,9 +273,7 @@ export function getVotes(vuln: Vulnerability): Vote[] {
         source: "CWE",
         weight: sourceWeights["CWE"],
       });
-      console.log(`✅ Mapped CWE ${cwe} to ${mappedType}`);
     } else {
-      console.log(`⚠️ No mapping found for CWE ${cwe}`);
     }
   }
 
@@ -286,31 +282,25 @@ export function getVotes(vuln: Vulnerability): Vote[] {
 
   if (/privilege|unauthorized/.test(desc)) {
     votes.push({ type: "Elevation of Privilege", source: "Keyword", weight: sourceWeights["Keyword"] });
-    console.log("🔑 Matched keyword for Elevation of Privilege");
   }
 
   if (/spoof|impersonation/.test(desc)) {
     votes.push({ type: "Spoofing", source: "Keyword", weight: sourceWeights["Keyword"] });
-    console.log("🔑 Matched keyword for Spoofing");
   }
 
   if (/denial|crash/.test(desc)) {
     votes.push({ type: "Denial of Service", source: "Keyword", weight: sourceWeights["Keyword"] });
-    console.log("🔑 Matched keyword for Denial of Service");
   }
 
   if (/leak|plaintext/.test(desc)) {
     votes.push({ type: "Information Disclosure", source: "Keyword", weight: sourceWeights["Keyword"] });
-    console.log("🔑 Matched keyword for Information Disclosure");
   }
 
   // === (3) Severity-based Inference ===
   if (vuln.severity === "Critical") {
     votes.push({ type: "Elevation of Privilege", source: "Severity", weight: sourceWeights["Severity"] });
-    console.log("🔥 Critical severity → Elevation of Privilege");
   } else if (vuln.severity === "High") {
     votes.push({ type: "Tampering", source: "Severity", weight: sourceWeights["Severity"] });
-    console.log("⚠️ High severity → Tampering");
   }
 
   console.log("🗳️ Final Vote List:", votes);
@@ -324,14 +314,10 @@ export function resolveThreatType(votes: Vote[], artifactType: string): ThreatTy
     log: ["Elevation of Privilege"],
   };
 
-  console.log(`📦 Resolving threat type for artifact type: ${artifactType}`);
-
   // Remove votes that are not valid for the given artifact type
   const filteredVotes = votes.filter(
     (vote) => !invalidCombos[artifactType]?.includes(vote.type)
   );
-
-  console.log("🧹 Filtered Votes:", filteredVotes);
 
   const scoreMap: Record<ThreatType, number> = {} as Record<ThreatType, number>;
 
@@ -340,13 +326,10 @@ export function resolveThreatType(votes: Vote[], artifactType: string): ThreatTy
     scoreMap[vote.type] = (scoreMap[vote.type] || 0) + vote.weight;
   }
 
-  console.log("📊 Score Map:", scoreMap);
-
   // Sort threat types by their score descending
   const sorted = Object.entries(scoreMap).sort((a, b) => b[1] - a[1]);
 
   const result = sorted.length > 0 ? (sorted[0][0] as ThreatType) : null;
-  console.log("✅ Final resolved threat type:", result);
 
   return result;
 }

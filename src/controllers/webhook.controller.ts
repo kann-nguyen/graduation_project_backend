@@ -1,10 +1,6 @@
 import { Request, Response } from "express";
 import { ArtifactModel, ThreatModel } from "../models/models";
 import { errorResponse, successResponse } from "../utils/responseFormat";
-import { Threat } from "../models/threat";
-import { Vulnerability } from "../models/vulnerability";
-import { Artifact } from "../models/artifact";
-import path from "path";
 
 import { generateAndAttachThreats } from "./artifact.controller";
 

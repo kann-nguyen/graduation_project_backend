@@ -194,16 +194,20 @@ export async function addArtifactToPhase(req: Request, res: Response) {
   const { id } = req.params;
   const { data } = req.body;
   const { cpe, threatList} = data;
-  const user = await UserModel.findById("67f286bd35b165dc0adadacf");
+  const userId = req.user?._id;
+
+  let user = await UserModel.findById("68079a11ae6eca7a108312ce");
+  if(!userId) {
+    user = await UserModel.findById(userId);
+  }
 
   if (!user) {
     return res.json(errorResponse("User not found"));
   }
-  // ✅ Lấy projectName từ user.projectIn[0]
   data.projectId = user.projectIn[0].toString();
 
   // Fetch vulnerabilities and threats before creating artifact
-  if (cpe) {
+  if (cpe) { 
     try {
       const vulns = await fetchVulnsFromNVD(cpe);
       data.vulnerabilityList = vulns;
