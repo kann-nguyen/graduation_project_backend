@@ -260,6 +260,13 @@ export async function scanArtifact(artifact: Artifact) {
   console.log("[INFO] Scanning artifact", artifact.name);
   let state = "S1"; // Default state
 
+   // Create a clean artifact object with only needed properties
+   const scanArtifact = {
+    name: artifact.name,
+    version: artifact.version,
+    projectId: artifact.projectId.toString(), // Convert ObjectId to string
+    type: artifact.type
+  };
   switch (artifact.type) {
     case "docs":
       await scanDocumentInDocker(artifact);
@@ -268,11 +275,11 @@ export async function scanArtifact(artifact: Artifact) {
       await scanSourceCode(artifact);  // Use the new scanSourceCode function
       break;
     case "image":
-      let url = `${process.env.IMAGE_SCANNING_URL}/image`;
+      let url = `${process.env.IMAGE_SCANNING_URL}/scan`;
         try {
           axios.get(url, {
             params: {
-              name: `${artifact.name}:${artifact.version}`,
+              artifact: JSON.stringify(scanArtifact),
             },
           });
           console.log(`Image scanning triggered for artifact: ${artifact.name}`);

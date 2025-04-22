@@ -5,134 +5,163 @@ import "dotenv/config";
 import { mkdir, readFile, unlink } from "fs/promises";
 import axios from "axios";
 
+// Define Artifact interface type
+class Artifact {
+  constructor(name, version, projectId, type) {
+    this.name = name;
+    this.version = version;
+    this.projectId = projectId;
+    this.type = type;
+  }
+}
+
 const app = express();
 const port = 3000;
 
-// Utility: Log with timestamp
+// Add middleware to parse JSON in query params
+app.use((req, res, next) => {
+  if (req.query.artifact) {
+    try {
+      req.query.artifact = JSON.parse(decodeURIComponent(req.query.artifact));
+    } catch (error) {
+      return res.status(400).json({ error: "Invalid artifact format" });
+    }
+  }
+  next();
+});
+
 function log(message, type = "INFO") {
   console.log(`[${new Date().toISOString()}] [${type}] ${message}`);
 }
 
-// Function to run Grype scan
-const runGrypeScan = async (name, uuid) => {
-  return new Promise((resolve, reject) => {
-    const outputPath = `./scan-log/${uuid}.json`;
-    const command = spawn("grype", [
-      name,
-      "-o",
-      "json",
-      "--by-cve",
-      "--file",
-      outputPath,
-    ]);
-
-    command.stdout.on("data", (data) => {
-      log(`Grype: ${data}`);
-    });
-
-    command.stderr.on("data", (data) => {
-      log(`Grype Error: ${data}`, "ERROR");
-    });
-
-    command.on("close", (code) => {
-      log(`Grype process exited with code ${code}`);
-      if (code === 0) {
-        resolve(outputPath);
-      } else {
-        reject(new Error(`Grype exited with code ${code}`));
-      }
-    });
-  });
-};
-
-// Function to extract and send scan results
-const handleScanResult = async (filePath, name) => {
-  const data = await readFile(filePath, "utf8");
-  const output = JSON.parse(data);
-  const { matches } = output;
-
-  const vulnerabilities = matches.map((match) => {
-    const { vulnerability } = match;
-    const { id, severity, description, cvss } = vulnerability;
-    const cvssScore = cvss[cvss.length - 1]?.metrics?.baseScore ?? null;
-    return {
-      cveId: id,
-      severity,
-      description,
-      score: cvssScore,
-    };
-  });
-
-  // Determine security state
-  const securityState = determineSecurityState(vulnerabilities);
-  console.log(`[+] Security state for image '${name}': ${securityState}`);
-
-  await unlink(filePath);
-  log(`Deleted scan log: ${filePath}`);
-
-  const payload = {
-    eventCode: "IMAGE_SCAN_COMPLETE",
-    imageName: name,
-    securityState,
-    data: vulnerabilities,
-  };
-
-  console.log("[+] Webhook sent successfully.");
-
-  await axios.post(`${process.env.API_URL}/webhook/image`, payload);
-  log(`Sent scan results to ${process.env.API_URL}/webhook/image`);
-};
-
-// Route to scan Docker image
-app.get("/image", async (req, res) => {
-  const { name } = req.query;
-  if (!name) {
-    log("Missing image name in query", "WARN");
-    return res.status(400).json({ error: "Missing image name" });
-  }
-
+async function processImageScan(artifact) {
   const uuid = randomUUID();
+  const name = `${artifact.name}:${artifact.version}`;
   log(`Received scan request for image: ${name} (UUID: ${uuid})`);
 
-  res.json({ message: `Scanning image ${name}`, requestId: uuid });
-
   try {
-    // Create a folder if it doesn't exist
     await mkdir("./scan-log", { recursive: true });
-  } catch (error) {
-    console.log(error);
-  }
+    const outputPath = `./scan-log/${uuid}.json`;
+    
+    // Run Grype scan
+    await new Promise((resolve, reject) => {
+      const command = spawn("grype", [
+        name,
+        "-o",
+        "json",
+        "--by-cve",
+        "--file",
+        outputPath,
+      ]);
 
-  try {
-    log(`Start scan image: ${name} (UUID: ${uuid})`);
-    const filePath = await runGrypeScan(name, uuid);
-    log(`Start handle result image: ${name} (UUID: ${uuid})`);
-    await handleScanResult(filePath, name);
+      command.stdout.on("data", (data) => {
+        log(`Grype: ${data}`);
+      });
+
+      command.stderr.on("data", (data) => {
+        log(`Grype Error: ${data}`, "ERROR");
+      });
+
+      command.on("close", (code) => {
+        log(`Grype process exited with code ${code}`);
+        if (code === 0) {
+          resolve();
+        } else {
+          reject(new Error(`Grype exited with code ${code}`));
+        }
+      });
+    });
+
+    // Process scan results
+    const data = await readFile(outputPath, "utf8");
+    const output = JSON.parse(data);
+    const { matches } = output;
+
+    const vulnerabilities = matches.map((match) => {
+      const { vulnerability } = match;
+      const { id, severity, description, cvss } = vulnerability;
+      const cvssScore = cvss[cvss.length - 1]?.metrics?.baseScore ?? null;
+      return {
+        cveId: id,
+        severity,
+        description,
+        score: cvssScore,
+      };
+    });
+
+    // Determine security state
+    const criticals = vulnerabilities.filter((v) => v.severity === "Critical");
+    const highs = vulnerabilities.filter((v) => v.severity === "High");
+
+    let securityState = "S6";
+    if (criticals.length === 0 && highs.length === 0) {
+      securityState = "S3";
+    } else if (criticals.length > 0) {
+      securityState = "S5.2";
+    } else if (highs.length > 0) {
+      securityState = "S5.1*";
+    }
+
+    console.log(`[+] Security state for image '${name}': ${securityState}`);
+
+    await unlink(outputPath);
+    log(`Deleted scan log: ${outputPath}`);
+
+    const payload = {
+      eventCode: "IMAGE_SCAN_COMPLETE",
+      imageName: name,
+      securityState,
+      data: vulnerabilities
+    };
+
+    await axios.post(`${process.env.API_URL}/webhook/image`, payload);
+    log(`Sent scan results to ${process.env.API_URL}/webhook/image`);
+
+    return { success: true, requestId: uuid };
   } catch (error) {
     log(`Error during image scan: ${error.message}`, "ERROR");
+    return { success: false, error: error.message, requestId: uuid };
+  }
+}
+
+app.get("/scan", async (req, res) => {
+  try {
+    const { artifact: artifactData } = req.query;
+    
+    if (!artifactData) {
+      log("Missing artifact in query", "WARN");
+      return res.status(400).json({ error: "Missing artifact" });
+    }
+
+    // Create new Artifact instance
+    const artifact = new Artifact(
+      artifactData.name,
+      artifactData.version,
+      artifactData.projectId
+    );
+
+    if (!artifact.name || !artifact.version || !artifact.projectId) {
+      log("Invalid artifact data", "WARN");
+      return res.status(400).json({ 
+        error: "Invalid artifact. Required: name, version, projectId" 
+      });
+    }
+
+    const result = await processImageScan(artifact);
+    if (result.success) {
+      res.json({ 
+        message: `Scanning artifact ${artifact.name}:${artifact.version}`, 
+        requestId: result.requestId 
+      });
+    } else {
+      res.status(500).json({ error: result.error, requestId: result.requestId });
+    }
+  } catch (error) {
+    log(`Error processing request: ${error.message}`, "ERROR");
+    res.status(500).json({ error: "Internal server error" });
   }
 });
 
-function determineSecurityState(vulnerabilities) {
-  const criticals = vulnerabilities.filter((v) => v.severity === "Critical");
-  const highs = vulnerabilities.filter((v) => v.severity === "High");
-
-  if (criticals.length === 0 && highs.length === 0) {
-    return "S3"; // Ready to deploy
-  }
-
-  if (criticals.length > 0) {
-    return "S5.2"; // Partially Compromised
-  }
-
-  if (highs.length > 0) {
-    return "S5.1*"; // Threatened
-  }
-
-  return "S6"; // Protecting - fallback
-}
-
-// Health check route
 app.get("/", (req, res) => {
   res.send("Hello World!");
 });

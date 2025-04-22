@@ -8,7 +8,6 @@ import {
 } from "../utils/generateDockerfile";
 import axios from 'axios';
 import { Artifact } from "../models/artifact";
-import { spawn } from "child_process";
 import path from "path";
 import * as fs from "fs/promises";
 
@@ -53,7 +52,7 @@ export async function create(req: Request, res: Response) {
     console.log("[create] Generating Dockerfile from scanner config...");
     const dockerfileContent = await generateDockerfile(data.config);
 
-    const tempDir = path.join(__dirname, "../temp");
+    const tempDir = path.join("scanner-file");
     await fs.mkdir(tempDir, { recursive: true }); // Ensure temp dir exists
 
     const dockerfilePath = path.join(tempDir, `${newScanner.name.replace(/\s+/g, "-")}-Dockerfile`);
@@ -72,11 +71,8 @@ export async function create(req: Request, res: Response) {
     console.log("[create] Returning Dockerfile path...");
     return res.json(
       successResponse(
-        {
-          dockerfilePath,
-          dockerfile: dockerfileContent,
-        },
-        "Scanner created. Dockerfile saved in temp directory."
+        dockerfileContent,
+        "Scanner created."
       )
     );
   } catch (error) {
