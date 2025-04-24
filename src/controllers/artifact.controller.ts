@@ -142,14 +142,14 @@ const sourceWeights: Record<VotingSource, number> = {
 };
 
 //https://www.researchgate.net/publication/351864310_Towards_Practical_Cybersecurity_Mapping_of_STRIDE_and_CWE_-_a_Multi-perspective_Approach
-export async function loadCweMapping(): Promise<Record<string, Threat["type"]>> {
+export async function loadCweMapping(): Promise<Record<string, ThreatType[]>> {
   try {
     // Resolve the path to the JSON file
     const filePath = path.resolve("src\\utils\\cweToThreat.json");
     // Read the file contents as a UTF-8 string
     const data = await fs.readFile(filePath, "utf8");
     // Parse the JSON content into an object
-    const mapping: Record<string, Threat["type"]> = JSON.parse(data);
+    const mapping: Record<string, ThreatType[]> = JSON.parse(data);
     return mapping;
   } catch (err) {
     console.error("Failed to load CWE mapping:", err);
@@ -163,78 +163,147 @@ let cweToStrideMap:any;
   cweToStrideMap = await loadCweMapping();
 })();
 
-// Collect all potential threat "votes" for a given vulnerability
+/**
+ * Thu thập tất cả các "phiếu bầu" (votes) tiềm năng cho một lỗ hổng bảo mật
+ * @param vuln Đối tượng lỗ hổng cần phân tích
+ * @returns Mảng các phiếu bầu với trọng số tương ứng
+ */
 export function getVotes(vuln: Vulnerability): Vote[] {
   const votes: Vote[] = [];
 
-  // === (1) CWE Mapping ===
+  // === (1) Map CWE to STRIDE ===
+  // Analyze CWE codes and map to corresponding threat types
+  // Highest weight (3) because CWE is a reliable vulnerability classification standard
   for (const cwe of vuln.cwes || []) {
-    const mappedType = cweToStrideMap[cwe] ?? "Spoofing";
-    if (mappedType) {
-      votes.push({
-        type: mappedType as ThreatType,
-        source: "CWE",
-        weight: sourceWeights["CWE"],
-      });
-    } else {
+    const mappedTypes = cweToStrideMap[cwe];
+    if (mappedTypes) {
+      for (const mappedType of mappedTypes) {
+        votes.push({
+          type: mappedType as ThreatType,
+          source: "CWE",
+          weight: sourceWeights["CWE"], // Weight = 3
+        });
+      }
     }
   }
 
-  // === (2) Keyword Matching in Description ===
-  const desc = vuln.description?.toLowerCase() || "have no des";
+  // === (2) Analyze keywords in description ===
+  // Search for characteristic keywords in vulnerability description
+  // Medium weight (2) because it's based on semantic analysis
+  const desc = vuln.description?.toLowerCase() || "";
+  
+  // Keyword patterns for each threat type
+  const keywordPatterns = {
+    "Elevation of Privilege": /\b(privilege|permission|access control|unauthorized|admin|root|sudo)\b/,
+    "Spoofing": /\b(spoof|impersonat|authentica|identity|credential|phish|forge)\b/,
+    "Tampering": /\b(tamper|modify|alter|change|corrupt|inject|manipulate)\b/,
+    "Repudiation": /\b(repudiat|logging|audit|track|monitor|log file|activity)\b/,
+    "Information Disclosure": /\b(disclosure|leak|expose|sensitive|confidential|private|plaintext)\b/,
+    "Denial of Service": /\b(denial|dos|crash|exhaust|flood|unavailable|resource)\b/
+  };
 
-  if (/privilege|unauthorized/.test(desc)) {
-    votes.push({ type: "Elevation of Privilege", source: "Keyword", weight: sourceWeights["Keyword"] });
+  // Check each pattern and add vote if found
+  for (const [threatType, pattern] of Object.entries(keywordPatterns)) {
+    if (pattern.test(desc)) {
+      votes.push({
+        type: threatType as ThreatType,
+        source: "Keyword",
+        weight: sourceWeights["Keyword"] // Weight = 2
+      });
+    }
   }
 
-  if (/spoof|impersonation/.test(desc)) {
-    votes.push({ type: "Spoofing", source: "Keyword", weight: sourceWeights["Keyword"] });
+  // === (3) Infer from severity ===
+  // Map severity levels to threat types
+  // Lowest weight (1) as this is the simplest inference method
+  const severityMappings: Record<string, ThreatType[]> = {
+    "CRITICAL": ["Elevation of Privilege", "Information Disclosure"],
+    "HIGH": ["Information Disclosure", "Denial of Service"],
+    "MEDIUM": ["Tampering", "Repudiation"],
+    "LOW": ["Repudiation", "Spoofing"]
+  };
+
+  if (vuln.severity) {
+    const mappedTypes = severityMappings[vuln.severity.toUpperCase()];
+    if (mappedTypes) {
+      for (const mappedType of mappedTypes) {
+        votes.push({
+          type: mappedType,
+          source: "Severity",
+          weight: sourceWeights["Severity"] // Weight = 1
+        });
+      }
+    }
   }
 
-  if (/denial|crash/.test(desc)) {
-    votes.push({ type: "Denial of Service", source: "Keyword", weight: sourceWeights["Keyword"] });
-  }
-
-  if (/leak|plaintext/.test(desc)) {
-    votes.push({ type: "Information Disclosure", source: "Keyword", weight: sourceWeights["Keyword"] });
-  }
-
-  // === (3) Severity-based Inference ===
-  if (vuln.severity === "Critical") {
-    votes.push({ type: "Elevation of Privilege", source: "Severity", weight: sourceWeights["Severity"] });
-  } else if (vuln.severity === "High") {
-    votes.push({ type: "Tampering", source: "Severity", weight: sourceWeights["Severity"] });
-  }
-
-  console.log("🗳️ Final Vote List:", votes);
   return votes;
 }
 
-// Determine the most likely threat type from the votes
+/**
+ * Xác định loại threat có khả năng xảy ra nhất từ các phiếu bầu
+ * @param votes Mảng các phiếu bầu đã thu thập
+ * @param artifactType Loại artifact đang được phân tích
+ * @returns Loại threat phù hợp nhất hoặc null nếu không thể xác định
+ */
 export function resolveThreatType(votes: Vote[], artifactType: string): ThreatType | null {
-  const invalidCombos: Record<string, ThreatType[]> = {
-    docs: ["Tampering", "Elevation of Privilege"],
-    log: ["Elevation of Privilege"],
-  };
-
-  // Remove votes that are not valid for the given artifact type
-  const filteredVotes = votes.filter(
-    (vote) => !invalidCombos[artifactType]?.includes(vote.type)
-  );
-
+  // Initialize score map for each threat type
   const scoreMap: Record<ThreatType, number> = {} as Record<ThreatType, number>;
 
-  // Calculate scores
-  for (const vote of filteredVotes) {
+  // Calculate total score for each threat type
+  for (const vote of votes) {
     scoreMap[vote.type] = (scoreMap[vote.type] || 0) + vote.weight;
   }
 
-  // Sort threat types by their score descending
+  // Sort threats by score in descending order
   const sorted = Object.entries(scoreMap).sort((a, b) => b[1] - a[1]);
 
-  const result = sorted.length > 0 ? (sorted[0][0] as ThreatType) : null;
+  // If no votes, return null
+  if (sorted.length === 0) return null;
 
-  return result;
+  // Artifact type specific threat prioritization
+  switch (artifactType.toLowerCase()) {
+    case 'api':
+    case 'service':
+      // For APIs and services, prioritize Information Disclosure and Denial of Service
+      for (const [threatType, _] of sorted) {
+        if (threatType === 'Information Disclosure' || threatType === 'Denial of Service') {
+          return threatType as ThreatType;
+        }
+      }
+      break;
+    
+    case 'database':
+      // For databases, prioritize Information Disclosure and Tampering
+      for (const [threatType, _] of sorted) {
+        if (threatType === 'Information Disclosure' || threatType === 'Tampering') {
+          return threatType as ThreatType;
+        }
+      }
+      break;
+    
+    case 'web':
+    case 'webapp':
+      // For web applications, prioritize Spoofing and Information Disclosure
+      for (const [threatType, _] of sorted) {
+        if (threatType === 'Spoofing' || threatType === 'Information Disclosure') {
+          return threatType as ThreatType;
+        }
+      }
+      break;
+
+    case 'authentication':
+    case 'auth':
+      // For authentication components, prioritize Spoofing and Elevation of Privilege
+      for (const [threatType, _] of sorted) {
+        if (threatType === 'Spoofing' || threatType === 'Elevation of Privilege') {
+          return threatType as ThreatType;
+        }
+      }
+      break;
+  }
+
+  // If no specific prioritization matched, return the highest scoring threat
+  return sorted[0][0] as ThreatType;
 }
 
 // Hàm gộp danh sách lỗ hổng và loại bỏ trùng lặp
