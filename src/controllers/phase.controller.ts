@@ -279,7 +279,7 @@ export async function scanArtifact(artifact: Artifact) {
         try {
           axios.get(url, {
             params: {
-              artifact: JSON.stringify(scanArtifact),
+              name: `${artifact.name}:${artifact.version}`,
             },
           });
           console.log(`Image scanning triggered for artifact: ${artifact.name}`);

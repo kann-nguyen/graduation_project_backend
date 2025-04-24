@@ -42,10 +42,11 @@ const sampleCode = `async function processImageScan(name) {
       response.push(processed);
     });
     response = response.flat();
-    await axios.post(\`https://dashboard-api.up.railway.app/webhook/image\`, {
+    await axios.post(\`http://localhost:3001/webhook/image\`, {
       eventCode: \`IMAGE_SCAN_COMPLETE\`,
       imageName: name,
       data: response,
+      securityState: "S1",
     });
   } catch (err) {
     fastify.log.error(err);
