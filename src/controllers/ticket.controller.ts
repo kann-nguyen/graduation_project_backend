@@ -1,7 +1,7 @@
 import { Request, Response } from "express";
-import { AccountModel, ArtifactModel, ChangeHistoryModel, ProjectModel, ThreatModel, TicketModel, UserModel } from "../models/models";
+import { AccountModel, ArtifactModel, ChangeHistoryModel, PhaseModel, ProjectModel, ThreatModel, TicketModel, UserModel } from "../models/models";
 import { errorResponse, successResponse } from "../utils/responseFormat";
-import { boolean } from "zod";
+import { scanArtifact } from "./phase.controller";
 
 /**
  * Lấy tất cả ticket của một dự án
@@ -356,8 +356,15 @@ export async function suggestAssigneeFromThreatType(projectId: string, threatTyp
     const managerConfigThreshold = 0.5; // Ví dụ Manager yêu cầu xử lý 50% threat
 
     if (submittedRatio >= managerConfigThreshold) {
-      // Trigger quét lại artifact
-      //const scanResult = await scanArtifact(artifact); // giả lập gọi scanner và trả về danh sách vuln mới
+      // Find the phase that contains this artifact
+      const phase = await PhaseModel.findOne({ artifacts: artifact._id });
+      if (!phase) {
+        console.error(`[ERROR] Could not find phase containing artifact ${artifact._id}`);
+        return;
+      }
+
+      // Trigger quét lại artifact với phase ID thực
+      await scanArtifact(artifact, phase._id.toString());
     }
   }
 

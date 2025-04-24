@@ -2,7 +2,7 @@ import { Request, Response } from "express";
 import { ArtifactModel, ThreatModel } from "../models/models";
 import { errorResponse, successResponse } from "../utils/responseFormat";
 
-import { generateAndAttachThreats } from "./artifact.controller";
+import { processScannerResult } from "./artifact.controller";
 
 // Định nghĩa kiểu dữ liệu cho body request
 interface RequestBody {
@@ -50,17 +50,8 @@ export async function importVulnToImage(req: Request, res: Response) {
       );
     }
 
-    // Update vulnerabilities
-    console.log(`[+] Updating vulnerability list for artifact ${name}:${version}`);
-    await ArtifactModel.updateMany({ name, version }, {
-      $set: {
-        state: securityState,
-        vulnerabilityList: data,
-      },
-    });
-
     for (const artifact of artifacts) {
-      generateAndAttachThreats(artifact._id);
+      processScannerResult(artifact._id.toString(), data);
     }
 
   } catch (error) {

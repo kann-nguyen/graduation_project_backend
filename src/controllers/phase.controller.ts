@@ -15,7 +15,6 @@ import {
   fetchVulnsFromNVD,
 } from "../utils/vuln";
 import { Artifact } from "../models/artifact";
-import { Types } from "mongoose";
 import {
   scanDocumentInDocker,
   scanSourceCode
@@ -243,7 +242,7 @@ export async function addArtifactToPhase(req: Request, res: Response) {
     // ✅ Bắt đầu scan ở background
     setImmediate(async () => {
       try {
-        await scanArtifact(artifact);
+        await scanArtifact(artifact, id);
       } catch (error) {
         console.error("[ERROR] Scanning failed:", error);
       }
@@ -256,17 +255,27 @@ export async function addArtifactToPhase(req: Request, res: Response) {
 }
 
 
-export async function scanArtifact(artifact: Artifact) {
+export async function scanArtifact(artifact: Artifact, phaseId: string) {
   console.log("[INFO] Scanning artifact", artifact.name);
-  let state = "S1"; // Default state
 
-   // Create a clean artifact object with only needed properties
-   const scanArtifact = {
-    name: artifact.name,
-    version: artifact.version,
-    projectId: artifact.projectId.toString(), // Convert ObjectId to string
-    type: artifact.type
-  };
+  const phase = await PhaseModel.findById(phaseId).populate("scanners");
+  if (!phase) {
+    console.error("[ERROR] Phase not found for artifact", artifact.name);
+    return;
+  }
+  const scanners = phase.scanners || [];
+
+  const artifactDoc = await ArtifactModel.findById(artifact._id);
+  if (!artifactDoc) {
+    console.error("[ERROR] Artifact not found in the database");
+    return;
+  }
+
+  artifactDoc.totalScanners = Math.max(scanners.length, 1); // Set the total number of scanners
+  artifactDoc.scannersCompleted = 0;
+
+  await artifactDoc.save();
+
   switch (artifact.type) {
     case "docs":
       await scanDocumentInDocker(artifact);

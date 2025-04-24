@@ -93,103 +93,6 @@ export async function update(req: Request, res: Response) {
   }
 }
 
-/**
- * Từ artifact, sinh các threat dựa trên vulnerabilityList
- */
-export async function generateAndAttachThreats1(req: Request, res: Response) {
-  const artifactId = req.params.id;
-
-  try {
-    // Step 1: Fetch the artifact by ID
-    const artifact = await ArtifactModel.findById(artifactId);
-    if (!artifact) {
-      return res.status(404).json({ message: `Artifact with ID ${artifactId} not found.`});
-    }
-
-    // Step 2: Check if there are any vulnerabilities associated with the artifact
-    if (!artifact.vulnerabilityList || artifact.vulnerabilityList.length === 0) {
-      return res.status(400).json({ message: `No vulnerabilities found for artifact ${artifact.name}.` });
-    }
-
-    console.log(`🚧 Generating threats for artifact: ${artifact.name}`);
-
-    // Initialize threat list if not already present
-    artifact.threatList = artifact.threatList || [];
-
-    // Step 3: Loop through vulnerabilities and create threats
-    for (const vuln of artifact.vulnerabilityList) {
-      const threatData = createThreatFromVuln(vuln, artifact.type);
-
-      // Create a new threat and save it to the database
-      const newThreat = await ThreatModel.create({
-        ...threatData,
-      });
-
-      // Step 4: Update artifact's threat list
-      artifact.threatList.push(newThreat._id);
-    }
-
-    // Step 5: Save updated artifact with attached threats
-    await artifact.save();
-
-    // Respond with success
-    console.log(`✅ Successfully saved ${artifact.threatList.length} threats for artifact "${artifact.name}"`);
-    return res.status(200).json({
-      message: `Successfully saved ${artifact.threatList.length} threats for artifact "${artifact.name}"`,
-      threatList: artifact.threatList,
-    });
-
-  } catch (error) {
-    console.error(error);
-    return res.status(500).json({ message: "An error occurred while generating threats." });
-  }
-}
-
-export async function generateAndAttachThreats(artifactId: any) {
-  try {
-    // Step 1: Fetch the artifact by ID
-    const artifact = await ArtifactModel.findById(artifactId);
-    if (!artifact) {
-      return;
-    }
-
-    // Step 2: Check if there are any vulnerabilities associated with the artifact
-    if (!artifact.vulnerabilityList || artifact.vulnerabilityList.length === 0) {
-      return;
-    }
-
-    console.log(`🚧 Generating threats for artifact: ${artifact.name}`);
-
-    // Initialize threat list if not already present
-    artifact.threatList = artifact.threatList || [];
-
-    // Step 3: Loop through vulnerabilities and create threats
-    for (const vuln of artifact.vulnerabilityList) {
-      const threatData = createThreatFromVuln(vuln, artifact.type);
-
-      // Create a new threat and save it to the database
-      const newThreat = await ThreatModel.create({
-        ...threatData,
-      });
-
-      // Step 4: Update artifact's threat list
-      artifact.threatList.push(newThreat._id);
-
-      autoCreateTicketFromThreat(artifactId, newThreat._id);
-    }
-
-    // Step 5: Save updated artifact with attached threats
-    await artifact.save();
-
-    // Respond with success
-    console.log(`✅ Successfully saved ${artifact.threatList.length} threats for artifact "${artifact.name}"`);
-
-  } catch (error) {
-    console.error(error);
-    return;
-  }
-}
-
 // Generate a threat from a vulnerability
 function createThreatFromVuln(vuln: any, artifactType: string): Partial<Threat> {
   const votes = getVotes(vuln);
@@ -334,7 +237,50 @@ export function resolveThreatType(votes: Vote[], artifactType: string): ThreatTy
   return result;
 }
 
+// Hàm gộp danh sách lỗ hổng và loại bỏ trùng lặp
+function mergeVulnerabilities(existingVulns: any[], newVulns: any[]): any[] {
+  const merged = [...existingVulns];
+  
+  for (const newVuln of newVulns) {
+    const exists = merged.some(v => v.cveId === newVuln.cveId);
+    if (!exists) {
+      merged.push(newVuln);
+    }
+  }
+  
+  return merged;
+}
 
+// Hàm xử lý kết quả từ một scanner
+export async function processScannerResult(artifactId: string, vulns: any): Promise<void> {
+  try {
+    const artifact = await ArtifactModel.findById(artifactId);
+    if (!artifact) {
+      console.error(`Artifact ${artifactId} not found`);
+      return;
+    }
+
+    // Khởi tạo hoặc cập nhật tempVuls
+    artifact.tempVuls = mergeVulnerabilities(artifact.tempVuls || [], vulns);
+    
+    // Tăng số lượng scanner đã hoàn thành
+    artifact.scannersCompleted = (artifact.scannersCompleted || 0) + 1;
+    
+    await artifact.save();
+    
+    // Kiểm tra nếu tất cả scanner đã hoàn thành
+    if (artifact.scannersCompleted >= (artifact.totalScanners ?? 1)) {
+      await updateArtifactAfterScan(artifact);
+      // Reset counters sau khi hoàn thành
+      artifact.scannersCompleted = 0;
+      artifact.totalScanners = 0;
+      await artifact.save();
+    }
+  } catch (error) {
+    console.error("Error processing scanner result:", error);
+    throw error;
+  }
+}
 
 /**
  * Kiểm tra threat có phù hợp với vulnerability không. 
@@ -423,6 +369,7 @@ async function processNewVulnerabilities(artifact: any): Promise<void> {
       const threatData = createThreatFromVuln(newVul, artifact.type);
       const createdThreat = await ThreatModel.create(threatData);
       artifact.threatList.push(createdThreat._id);
+      autoCreateTicketFromThreat(artifact._id, createdThreat._id);
       console.log(`Threat mới được tạo cho vulnerability ${newVul.cveId}`);
     }
   }
@@ -444,6 +391,7 @@ export async function updateArtifactAfterScan(artifact: any): Promise<void> {
 
     // 3. Gán lại vulnerabilityList bằng tempVuls và lưu artifact
     artifact.vulnerabilityList = artifact.tempVuls || [];
+    artifact.tempVuls = [];
     await artifact.save();
     console.log(`Artifact ${artifact._id} đã được cập nhật với vulnerabilityList mới từ tempVuls.`);
   } catch (error) {

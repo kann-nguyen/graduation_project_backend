@@ -5,16 +5,6 @@ import "dotenv/config";
 import { mkdir, readFile, unlink } from "fs/promises";
 import axios from "axios";
 
-// Define Artifact interface type
-class Artifact {
-  constructor(name, version, projectId, type) {
-    this.name = name;
-    this.version = version;
-    this.projectId = projectId;
-    this.type = type;
-  }
-}
-
 const app = express();
 const port = 3000;
 
@@ -34,9 +24,8 @@ function log(message, type = "INFO") {
   console.log(`[${new Date().toISOString()}] [${type}] ${message}`);
 }
 
-async function processImageScan(artifact) {
+async function processImageScan(name) {
   const uuid = randomUUID();
-  const name = `${artifact.name}:${artifact.version}`;
   log(`Received scan request for image: ${name} (UUID: ${uuid})`);
 
   try {
@@ -126,31 +115,16 @@ async function processImageScan(artifact) {
 
 app.get("/scan", async (req, res) => {
   try {
-    const { artifact: artifactData } = req.query;
-    
-    if (!artifactData) {
-      log("Missing artifact in query", "WARN");
-      return res.status(400).json({ error: "Missing artifact" });
+    const { name } = req.query;
+    if (!name) {
+      log("Missing image name in query", "WARN");
+      return res.status(400).json({ error: "Missing image name" });
     }
 
-    // Create new Artifact instance
-    const artifact = new Artifact(
-      artifactData.name,
-      artifactData.version,
-      artifactData.projectId
-    );
-
-    if (!artifact.name || !artifact.version || !artifact.projectId) {
-      log("Invalid artifact data", "WARN");
-      return res.status(400).json({ 
-        error: "Invalid artifact. Required: name, version, projectId" 
-      });
-    }
-
-    const result = await processImageScan(artifact);
+    const result = await processImageScan(name);
     if (result.success) {
       res.json({ 
-        message: `Scanning artifact ${artifact.name}:${artifact.version}`, 
+        message: `Scanning artifact ${name}...`, 
         requestId: result.requestId 
       });
     } else {
