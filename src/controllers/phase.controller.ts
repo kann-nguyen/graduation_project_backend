@@ -194,11 +194,15 @@ export async function addArtifactToPhase(req: Request, res: Response) {
   const { data } = req.body;
   const { cpe, threatList} = data;
   const userId = req.user?._id;
+  //log userId
+  console.log("UserId: " + userId);
 
-  let user = await UserModel.findById("68079a11ae6eca7a108312ce");
+  let user = await UserModel.findById("680b17c287d12044e8f04f95");
   if(!userId) {
-    user = await UserModel.findById(userId);
-  }
+    user = await UserModel.findOne( {
+      account: userId,
+    });
+  } 
 
   if (!user) {
     return res.json(errorResponse("User not found"));
@@ -271,44 +275,37 @@ export async function scanArtifact(artifact: Artifact, phaseId: string) {
     return;
   }
 
-  artifactDoc.totalScanners = Math.max(scanners.length, 1); // Set the total number of scanners
+  artifactDoc.totalScanners = Math.max(scanners.length, 1);
   artifactDoc.scannersCompleted = 0;
-
+  artifactDoc.isScanning = true; // Set scanning flag to true
   await artifactDoc.save();
 
-  switch (artifact.type) {
-    case "docs":
-      await scanDocumentInDocker(artifact);
-      break;
-    case "source code":
-      await scanSourceCode(artifact);  // Use the new scanSourceCode function
-      break;
-    case "image":
-      let url = `${process.env.IMAGE_SCANNING_URL}/scan`;
-        try {
-          axios.get(url, {
-            params: {
-              name: `${artifact.name}:${artifact.version}`,
-            },
-          });
-          console.log(`Image scanning triggered for artifact: ${artifact.name}`);
-        } catch (error) {
-          break;
-        }
+  try {
+    switch (artifact.type) {
+      case "docs":
+        await scanDocumentInDocker(artifact);
         break;
-    case "test report":
-      break;
-    case "version release":
-      break;
-    case "deployment config":
-      break;
-    case "log":
-      break;
-    case "monitoring dashboard":
-      break;          
-    default:
-      console.log("[INFO] Unknown artifact type, assigning default state");
-      break;
+      case "source code":
+        await scanSourceCode(artifact);
+        break;
+      case "image":
+        let url = `${process.env.IMAGE_SCANNING_URL}/scan`;
+        await axios.get(url, {
+          params: {
+            name: `${artifact.name}:${artifact.version}`,
+          },
+        });
+        console.log(`Image scanning triggered for artifact: ${artifact.name}`);
+        break;
+      default:
+        console.log("[INFO] Unknown artifact type, assigning default state");
+        break;
+    }
+  } catch (error) {
+    // In case of error, reset scanning state
+    artifactDoc.isScanning = false;
+    await artifactDoc.save();
+    console.error("[ERROR] Scanning failed:", error);
   }
 }
 

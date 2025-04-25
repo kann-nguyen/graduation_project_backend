@@ -8,7 +8,7 @@ export class ChangeHistory {
   public objectId!: mongoose.Types.ObjectId;
   @prop({ enum: ["create", "update", "delete"], required: true })
   public action!: string;
-  @prop({ required: true, ref: () => Account })
+  @prop({ref: () => Account })
   public account!: Ref<Account>;
   @prop({ required: true })
   public timestamp!: Date;

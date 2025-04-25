@@ -10,25 +10,34 @@ import { scanArtifact } from "./phase.controller";
  * @returns {Promise<Response>} - Trả về JSON response
  */
 export async function getAll(req: Request, res: Response) {
+  console.log('📥 [getAll] Incoming request with query:', req.query);
+  console.log('👤 [getAll] User ID from request:', req.user?._id);
+  
   const { projectName } = req.query;
   const userId = req.user?._id;
 
   if (!projectName) {
-    console.log('❌ No project name provided');
+    console.log('❌ [getAll] No project name provided');
     return res.json(errorResponse("Project name is required"));
   }
 
   try {
+    console.log(`🔍 [getAll] Looking for user with account:`, userId);
     // Get the user and their account to check role
     const user = await UserModel.findOne({ account: userId });
     if (!user) {
+      console.log('❌ [getAll] User not found for account:', userId);
       return res.json(errorResponse("User not found"));
     }
+    console.log('✅ [getAll] Found user:', { id: user._id, name: user.name });
 
+    console.log(`🔍 [getAll] Looking for account:`, user.account);
     const account = await AccountModel.findById(user.account);
     if (!account) {
+      console.log('❌ [getAll] Account not found for id:', user.account);
       return res.json(errorResponse("Account not found"));
     }
+    console.log('✅ [getAll] Found account with role:', account.role);
 
     // Create base query for tickets
     let query: { projectName: string; assignee?: string; status?: { $nin?: string[] } } = { 
@@ -41,13 +50,15 @@ export async function getAll(req: Request, res: Response) {
       query.status = { $nin: ["Not accepted", "Resolved"] };
     }
 
+    console.log('🔍 [getAll] Searching tickets with query:', JSON.stringify(query));
     const tickets = await TicketModel.find(query).populate({
       path: "assignee assigner",
     });
+    console.log(`✅ [getAll] Found ${tickets.length} tickets`);
 
     return res.json(successResponse(tickets, "Tickets fetched successfully"));
   } catch (error) {
-    console.error('❌ Error fetching tickets:', error);
+    console.error('❌ [getAll] Error fetching tickets:', error);
     return res.json(errorResponse(`Internal server error: ${error}`));
   }
 }
@@ -85,10 +96,12 @@ export async function create(req: Request, res: Response) {
   const { data } = req.body;
   const userId = req.user?._id;
   try {
-    let user = await UserModel.findById("68079a11ae6eca7a108312ce");
-    if(!userId) {
-      user = await UserModel.findById(userId);
-    }
+    let user = await UserModel.findById("680b17c287d12044e8f04f95");
+  if(!userId) {
+    user = await UserModel.findOne( {
+      account: userId,
+    });
+  } 
 
     if (!user) {
       return res.json(errorResponse("User not found"));
@@ -130,7 +143,7 @@ export async function create(req: Request, res: Response) {
       action: "create",
       timestamp: ticket.createdAt,
       account: user._id,
-      description: `created this ticket`,
+      description: `${user.name} created this ticket`,
     });
 
     return res.json({ success: true, message: "Ticket created successfully" });
@@ -178,6 +191,14 @@ export async function autoCreateTicketFromThreat(artifactId: any, threatId: any)
       targetedThreat: threatId,
       status: "Not accepted",
       priority: priority,
+    });
+
+    await ChangeHistoryModel.create({
+      objectId: ticket._id,
+      action: "create",
+      timestamp: ticket.createdAt,
+      account: null,
+      description: `Ticket automatically created for threat ${threat.name}`,
     });
 
   } catch (error) {
@@ -241,8 +262,7 @@ export async function updateState(req: Request, res: Response) {
       { _id: ticketId },
       {
         $set: {
-          status: data.status,
-          assigner: user._id
+          status: data.status
         }
       },
       { new: true }
@@ -258,16 +278,41 @@ export async function updateState(req: Request, res: Response) {
       case "Processing":
         await UserModel.findByIdAndUpdate(ticket.assignee, {
           $push: {
-            ticketAssigned: ticket._id,
+            ticketAssigned: ticket._id
           },
+        });
+        await TicketModel.findOneAndUpdate(
+          { _id: ticketId },
+          {
+            $set: {
+              status: data.status,
+              assigner: user._id
+            }
+          }
+        );
+        await ChangeHistoryModel.create({
+          objectId: ticket._id, 
+          action: "update",
+          timestamp: ticket.updatedAt,
+          account: user._id,
+          description: `${user.name} assigned ticket to ${ticket.assignee}`,
         });
         break;
 
       case "Submitted":
-        await handleTicketSubmitted(ticket._id.toString());
+        handleTicketSubmitted(ticket._id.toString());
+        await ChangeHistoryModel.create({
+          objectId: ticket._id, 
+          action: "update",
+          timestamp: ticket.updatedAt,
+          account: user._id,
+          description: `${user.name} submitted ticket`,
+        });
         break;
     }
 
+
+  
     console.log('✅ Update completed successfully');
     return res.json(successResponse(null, `Ticket status changed to: ${ticket.status} successfully`));
   } catch (error) {
@@ -276,7 +321,58 @@ export async function updateState(req: Request, res: Response) {
   }
 }
 
+/**
+ * Update the status of a ticket related to a threat.
+ * If isDone = true: update ticket to "Resolved",
+ * if false: update ticket to "Processing".
+ */
+export async function updateTicketStatusForThreat(threatId: any, isDone: boolean) {
+  // Find ticket linked to this threat
+  const ticket = await TicketModel.findOne({ targetedThreat: threatId });
+  if (!ticket) {
+    console.warn(`No ticket found linked to threat ${threatId}`);
+    return;
+  }
 
+  if (ticket.status === "Submitted") {
+    const newStatus = isDone ? "Resolved" : "Processing";
+    console.log(`📝 Updating ticket ${ticket._id} status from ${ticket.status} to ${newStatus}`);
+
+    // Update ticket status
+    const updatedTicket = await TicketModel.findByIdAndUpdate(
+      ticket._id, 
+      { $set: { status: newStatus } },
+      { new: true }
+    );
+
+    if (!updatedTicket) {
+      console.error(`❌ Failed to update ticket ${ticket._id}`);
+      return;
+    }
+
+    // Record the change history with detailed description
+    let description = "";
+    if (isDone) {
+      description = `Verified success and resolved ticket`;
+    } else {
+      description = `Verified failed and returned ticket to processing`;
+    }
+
+    await ChangeHistoryModel.create({
+      objectId: ticket._id,
+      action: "update",
+      timestamp: ticket.updatedAt,
+      account: null,
+      description: description
+    });
+
+    // Log the successful status change
+    const statusChangeMessage = isDone 
+      ? `✅ Successfully resolved ticket ${ticket._id}`
+      : `🔄 Returned ticket ${ticket._id} to processing`;
+    console.log(statusChangeMessage);
+  }
+}
 
 export async function suggestAssigneeFromThreatType(projectId: string, threatType: string) {
   try {
@@ -353,7 +449,7 @@ export async function suggestAssigneeFromThreatType(projectId: string, threatTyp
     const totalThreat = artifact.threatList?.length || 0;
     const submittedRatio = (artifact.numberThreatSubmitted || 0) / totalThreat;
 
-    const managerConfigThreshold = 0.5; // Ví dụ Manager yêu cầu xử lý 50% threat
+    const managerConfigThreshold = 0.01; // Ví dụ Manager yêu cầu xử lý 50% threat
 
     if (submittedRatio >= managerConfigThreshold) {
       // Find the phase that contains this artifact
@@ -364,7 +460,14 @@ export async function suggestAssigneeFromThreatType(projectId: string, threatTyp
       }
 
       // Trigger quét lại artifact với phase ID thực
-      await scanArtifact(artifact, phase._id.toString());
+      // ✅ Bắt đầu scan ở background
+    setImmediate(async () => {
+      try {
+        await scanArtifact(artifact, phase._id.toString());
+      } catch (error) {
+        console.error("[ERROR] Scanning failed:", error);
+      }
+    });
     }
   }
 

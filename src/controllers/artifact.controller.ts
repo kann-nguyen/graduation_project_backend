@@ -7,7 +7,7 @@ import { Vulnerability } from "../models/vulnerability";
 import { Threat } from "../models/threat";
 import path from "path";
 import * as fs from "fs/promises";
-import { autoCreateTicketFromThreat } from "./ticket.controller";
+import { autoCreateTicketFromThreat, updateTicketStatusForThreat } from "./ticket.controller";
 
 // Lấy tất cả artifacts thuộc về một project cụ thể
 export async function getAll(req: Request, res: Response) {
@@ -20,6 +20,7 @@ export async function getAll(req: Request, res: Response) {
       path: "phaseList",
       populate: {
         path: "artifacts",
+        select: "+isScanning" // Explicitly include isScanning field
       },
     });
     
@@ -54,7 +55,7 @@ export async function get(req: Request, res: Response) {
   const { id } = req.params;
   try {
     // Tìm artifact theo ID
-    const artifact = await ArtifactModel.findById(id);
+    const artifact = await ArtifactModel.findById(id).select("+isScanning");
     
     // Trả về artifact nếu tìm thấy
     return res.json(successResponse(artifact, "Artifact fetched successfully"));
@@ -82,6 +83,7 @@ export async function update(req: Request, res: Response) {
       },
       {
         new: true, // Trả về artifact sau khi đã cập nhật
+        select: "+isScanning" // Include isScanning field in response
       }
     );
     
@@ -260,48 +262,6 @@ export function resolveThreatType(votes: Vote[], artifactType: string): ThreatTy
   // If no votes, return null
   if (sorted.length === 0) return null;
 
-  // Artifact type specific threat prioritization
-  switch (artifactType.toLowerCase()) {
-    case 'api':
-    case 'service':
-      // For APIs and services, prioritize Information Disclosure and Denial of Service
-      for (const [threatType, _] of sorted) {
-        if (threatType === 'Information Disclosure' || threatType === 'Denial of Service') {
-          return threatType as ThreatType;
-        }
-      }
-      break;
-    
-    case 'database':
-      // For databases, prioritize Information Disclosure and Tampering
-      for (const [threatType, _] of sorted) {
-        if (threatType === 'Information Disclosure' || threatType === 'Tampering') {
-          return threatType as ThreatType;
-        }
-      }
-      break;
-    
-    case 'web':
-    case 'webapp':
-      // For web applications, prioritize Spoofing and Information Disclosure
-      for (const [threatType, _] of sorted) {
-        if (threatType === 'Spoofing' || threatType === 'Information Disclosure') {
-          return threatType as ThreatType;
-        }
-      }
-      break;
-
-    case 'authentication':
-    case 'auth':
-      // For authentication components, prioritize Spoofing and Elevation of Privilege
-      for (const [threatType, _] of sorted) {
-        if (threatType === 'Spoofing' || threatType === 'Elevation of Privilege') {
-          return threatType as ThreatType;
-        }
-      }
-      break;
-  }
-
   // If no specific prioritization matched, return the highest scoring threat
   return sorted[0][0] as ThreatType;
 }
@@ -329,24 +289,27 @@ export async function processScannerResult(artifactId: string, vulns: any): Prom
       return;
     }
 
-    // Khởi tạo hoặc cập nhật tempVuls
+    // Initialize or update tempVuls
     artifact.tempVuls = mergeVulnerabilities(artifact.tempVuls || [], vulns);
     
-    // Tăng số lượng scanner đã hoàn thành
+    // Increment completed scanners count
     artifact.scannersCompleted = (artifact.scannersCompleted || 0) + 1;
     
-    await artifact.save();
-    
-    // Kiểm tra nếu tất cả scanner đã hoàn thành
+    // Check if all scanners have completed
     if (artifact.scannersCompleted >= (artifact.totalScanners ?? 1)) {
       await updateArtifactAfterScan(artifact);
-      // Reset counters sau khi hoàn thành
+      // Reset counters and scanning state
       artifact.scannersCompleted = 0;
       artifact.totalScanners = 0;
-      await artifact.save();
+      artifact.isScanning = false;
     }
+    
+    await artifact.save();
+
   } catch (error) {
     console.error("Error processing scanner result:", error);
+    // Reset scanning state on error
+    await ArtifactModel.findByIdAndUpdate(artifactId, { isScanning: false });
     throw error;
   }
 }
@@ -357,35 +320,6 @@ export async function processScannerResult(artifactId: string, vulns: any): Prom
  */
 function threatMatchesVul(threat: any, vuln: any): boolean {
   return threat.name === vuln.cveId;
-}
-
-/**
- * Cập nhật trạng thái của ticket liên quan đến threat.
- * Nếu shouldProcess = true: cập nhật ticket thành "Processing",
- * nếu không: cập nhật ticket thành "Resolved".
- */
-async function updateTicketStatusForThreat(threatId: any, isDone: boolean) {
-  // Tìm ticket có liên kết với threat này
-  const ticket = await TicketModel.findOne({ targetedThreat: threatId });
-  if (!ticket) {
-    console.warn(`Không tìm thấy ticket liên kết với threat ${threatId}`);
-    return;
-  }
-  if (ticket.status == "Submitted") {
-    let newStatus = isDone ? "Resolved" : "Processing";
-
-    await TicketModel.findByIdAndUpdate(ticket._id, { $set: { status: newStatus } });
-
-    // Ghi lại lịch sử thay đổi
-    await ChangeHistoryModel.create({
-      objectId: ticket._id,
-      action: "update",
-      timestamp: ticket.createdAt,
-      account: ticket.assigner?._id,
-      description: `Ticket ${ticket.title} được cập nhật thành ${newStatus}`,
-    });
-  }
-  
 }
 
 /**

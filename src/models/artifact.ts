@@ -19,14 +19,7 @@ export class Artifact extends TimeStamps {
   @prop({
     required: true,
     enum: [
-      "docs",
-      "source code",
-      "image",
-      "test report",
-      "version release",
-      "deployment config",
-      "log",
-      "monitoring dashboard",
+      "image", "log", "source code", "executable", "library"
     ],
     type: String,
   })
@@ -64,6 +57,9 @@ export class Artifact extends TimeStamps {
 
   @prop({ default: 0,select: false  })
   public totalScanners?: number; // tổng số scanner cần chạy
+
+  @prop({ default: false,select: false  })
+  public isScanning?: boolean; // trạng thái đang quét hay không
 
   @prop({ select: false }) // không lưu trong DB
   public tempVuls?: ArraySubDocumentType<Vulnerability>[]; // danh sách vuln tạm thời từ scanner
