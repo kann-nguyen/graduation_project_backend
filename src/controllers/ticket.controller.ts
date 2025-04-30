@@ -218,7 +218,7 @@ export async function updateState(req: Request, res: Response) {
 
   try {
     // Find the ticket first to check current status
-    const currentTicket = await TicketModel.findById(ticketId);
+    const currentTicket = await TicketModel.findById(ticketId).populate('assignee');
 
     if (!currentTicket) {
       console.log('❌ Ticket not found');
@@ -226,7 +226,7 @@ export async function updateState(req: Request, res: Response) {
     }
 
     // Get the user making the request
-    const user = await UserModel.findOne( {
+    const user = await UserModel.findOne({
       account: userId,
     });
 
@@ -248,7 +248,7 @@ export async function updateState(req: Request, res: Response) {
         return res.json(errorResponse("Only managers can change ticket to Processing state"));
       }
     } else if (currentTicket.status === "Processing" && data.status === "Submitted") {
-      if (currentTicket.assignee?.toString() !== user._id.toString()) {
+      if (currentTicket.assignee?._id.toString() !== user._id.toString()) {
         console.log('❌ Permission denied: Non-assignee attempting to submit ticket');
         return res.json(errorResponse("Only the assigned user can change ticket to Submitted state"));
       }
@@ -266,7 +266,7 @@ export async function updateState(req: Request, res: Response) {
         }
       },
       { new: true }
-    );
+    ).populate('assignee');
 
     if (!ticket) {
       console.log('❌ Ticket not found after update');
@@ -276,11 +276,19 @@ export async function updateState(req: Request, res: Response) {
     // Handle post-update actions
     switch (ticket.status) {
       case "Processing":
-        await UserModel.findByIdAndUpdate(ticket.assignee, {
-          $push: {
-            ticketAssigned: ticket._id
-          },
-        });
+        // Find the assigned user first
+        const assignee = await UserModel.findById(ticket.assignee?._id);
+        
+        // Update the assignee's ticketAssigned array
+        if (assignee) {
+          await UserModel.findByIdAndUpdate(assignee._id, {
+            $addToSet: { // Use addToSet to avoid duplicates
+              ticketAssigned: ticket._id
+            },
+          });
+        }
+        
+        // Update ticket with assigner info
         await TicketModel.findOneAndUpdate(
           { _id: ticketId },
           {
@@ -290,29 +298,35 @@ export async function updateState(req: Request, res: Response) {
             }
           }
         );
+        
+        // Create history entry with proper names
+        const assigneeName = assignee?.name || 'Unknown';
+        
         await ChangeHistoryModel.create({
           objectId: ticket._id, 
           action: "update",
-          timestamp: ticket.updatedAt,
+          timestamp: new Date(),
           account: user._id,
-          description: `${user.name} assigned ticket to ${ticket.assignee}`,
+          description: `${user.name} assigned ticket to ${assigneeName}`,
         });
         break;
 
       case "Submitted":
+        // Get assignee name from populated ticket
+        const submitterName = (ticket.assignee && typeof ticket.assignee !== 'string' && 'name' in ticket.assignee ? ticket.assignee.name : user.name);
+        
         handleTicketSubmitted(ticket._id.toString());
+        
         await ChangeHistoryModel.create({
           objectId: ticket._id, 
           action: "update",
-          timestamp: ticket.updatedAt,
+          timestamp: new Date(),
           account: user._id,
-          description: `${user.name} submitted ticket`,
+          description: `${submitterName} submitted ticket`,
         });
         break;
     }
 
-
-  
     console.log('✅ Update completed successfully');
     return res.json(successResponse(null, `Ticket status changed to: ${ticket.status} successfully`));
   } catch (error) {
@@ -328,7 +342,10 @@ export async function updateState(req: Request, res: Response) {
  */
 export async function updateTicketStatusForThreat(threatId: any, isDone: boolean) {
   // Find ticket linked to this threat
-  const ticket = await TicketModel.findOne({ targetedThreat: threatId });
+  const ticket = await TicketModel.findOne({ targetedThreat: threatId }).populate({
+    path: "assignee targetedThreat",
+  });
+  
   if (!ticket) {
     console.warn(`No ticket found linked to threat ${threatId}`);
     return;
@@ -350,7 +367,12 @@ export async function updateTicketStatusForThreat(threatId: any, isDone: boolean
       return;
     }
 
-    // Record the change history with detailed description
+    // Get the threat name for better history logs
+    const threatName = (ticket.targetedThreat && typeof ticket.targetedThreat !== 'string' && 'name' in ticket.targetedThreat)
+      ? ticket.targetedThreat.name
+      : "unknown threat";
+    
+    // Record the change history with better descriptions
     let description = "";
     if (isDone) {
       description = `Verified success and resolved ticket`;
@@ -361,7 +383,7 @@ export async function updateTicketStatusForThreat(threatId: any, isDone: boolean
     await ChangeHistoryModel.create({
       objectId: ticket._id,
       action: "update",
-      timestamp: ticket.updatedAt,
+      timestamp: new Date(), // Use current time instead of ticket.updatedAt for accurate timestamps
       account: null,
       description: description
     });
@@ -411,20 +433,46 @@ export async function suggestAssigneeFromThreatType(projectId: string, threatTyp
     const { id } = req.params;
     const { data } = req.body;
     try {
+      // Get the original ticket before updating
+      const originalTicket = await TicketModel.findById(id);
+      
+      if (!originalTicket) {
+        return res.json(errorResponse("Ticket does not exist"));
+      }
+
       // Tìm và cập nhật ticket
       const ticket = await TicketModel.findByIdAndUpdate(id, data, { new: true });
+      
       if (ticket) {
-        // Ghi lại lịch sử thay đổi, bao gồm trạng thái đóng/mở ticket
+        // Build a simple change description with field names
+        const changedFields = [];
+        
+        if (data.title && data.title !== originalTicket.title) {
+          changedFields.push("title");
+        }
+        if (data.description && data.description !== originalTicket.description) {
+          changedFields.push("description");
+        }
+        if (data.assignee && data.assignee !== (originalTicket.assignee?.toString() || null)) {
+          changedFields.push("assignee");
+        }
+        
+        // Create a description with just the field names
+        const changeDescription = `${req.user?.username} updated ticket fields: ${changedFields.join(', ')}`;
+
+        // Ghi lại lịch sử thay đổi
         await ChangeHistoryModel.create({
           objectId: ticket._id,
           action: "update",
           timestamp: ticket.updatedAt,
           account: req.user?._id,
-          description: `${req.user?.username} change status of this ticket to ` + ticket.status
+          description: changeDescription
         });
+        
         return res.json(successResponse(null, "Ticket updated successfully"));
       }
-      return res.json(errorResponse("Ticket does not exist"));
+      
+      return res.json(errorResponse("Failed to update ticket"));
     } catch (error) {
       console.log(error);
       return res.json(errorResponse(`Internal server error: ${error}`));
@@ -451,7 +499,7 @@ export async function suggestAssigneeFromThreatType(projectId: string, threatTyp
 
     const managerConfigThreshold = 0.01; // Ví dụ Manager yêu cầu xử lý 50% threat
 
-    if (submittedRatio >= managerConfigThreshold) {
+    if (submittedRatio >= managerConfigThreshold && (artifact.totalScanners ?? 0) <= 0) {
       // Find the phase that contains this artifact
       const phase = await PhaseModel.findOne({ artifacts: artifact._id });
       if (!phase) {

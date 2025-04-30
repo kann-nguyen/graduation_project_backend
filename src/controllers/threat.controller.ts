@@ -1,4 +1,5 @@
 import { Request, Response } from "express";
+import mongoose from "mongoose";
 import { ArtifactModel, ThreatModel } from "../models/models";
 import { errorResponse, successResponse } from "../utils/responseFormat";
 
@@ -41,50 +42,52 @@ export async function create(req: Request, res: Response) {
 
 /**
  * Lấy thông tin của một threat dựa trên ID.
- * Threat là một phần của danh sách threatList trong ArtifactModel (sub-document).
  */
 export async function get(req: Request, res: Response) {
   const { id } = req.params;
-  try {
-    // Tìm artifact chứa threat có ID tương ứng
-    const artifact = await ArtifactModel.findOne({
-      threatList: { $elemMatch: { _id: id } },
-    });
 
-    // Lọc ra threat có ID khớp trong danh sách threatList của artifact
-    const threat = artifact?.threatList?.find((threatId) => threatId.toString() == id);
+  // Validate the ID format
+  if (!mongoose.Types.ObjectId.isValid(id)) {
+    return res.status(400).json(errorResponse("Invalid threat ID format"));
+  }
+
+  try {
+    // Directly query ThreatModel by ID
+    const threat = await ThreatModel.findById(id);
+
     if (!threat) {
-      return res.json(errorResponse(`Threat not found`));
+      return res.status(404).json(errorResponse("Threat not found"));
     }
 
     return res.json(successResponse(threat, "Threat retrieved successfully"));
   } catch (error) {
-    return res.json(errorResponse(`Internal server error: ${error}`));
+    console.error(`Error retrieving threat with ID ${id}:`, error);
+    return res.status(500).json(errorResponse(`Internal server error: ${error}`));
   }
 }
 
 /**
  * Cập nhật trạng thái (status) và biện pháp giảm thiểu (mitigation) của một threat.
- * Threat là một phần của danh sách threatList trong ArtifactModel (sub-document).
  */
 export async function update(req: Request, res: Response) {
   const { data } = req.body;
   const { status, mitigation } = data;
   const { id } = req.params;
   try {
-    // Cập nhật threat trong danh sách threatList của tất cả ArtifactModel chứa threat này
-    await ArtifactModel.updateMany(
-      { threatList: { $elemMatch: { _id: id } } },
-      {
-        $set: {
-          "threatList.$.status": status,
-          "threatList.$.mitigation": mitigation,
-        },
-      }
+    // Directly update the threat in ThreatModel
+    const updatedThreat = await ThreatModel.findByIdAndUpdate(
+      id,
+      { status, mitigation },
+      { new: true }
     );
+
+    if (!updatedThreat) {
+      return res.json(errorResponse("Threat not found"));
+    }
 
     return res.json(successResponse(null, "Threat updated successfully"));
   } catch (error) {
+    console.error(`Error updating threat with ID ${id}:`, error);
     return res.json(errorResponse(`Internal server error: ${error}`));
   }
 }

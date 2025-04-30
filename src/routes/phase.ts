@@ -13,6 +13,8 @@ import {
   updateTemplate,
   deleteTemplate,
   createPhaseTemplate,
+  addScannerToPhase,
+  //   removeScannerFromPhase, // Commented out as it is not exported
 } from "../controllers/phase.controller";
 
 const phaseRoute = express.Router();
@@ -30,4 +32,6 @@ phaseRoute.patch("/:id/task/add/:taskId", addTaskToPhase);
 phaseRoute.patch("/:id/task/delete/:taskId", removeTaskFromPhase);
 phaseRoute.patch("/:id/artifact/add", addArtifactToPhase);
 phaseRoute.patch("/:id/artifact/delete/:artifactId", removeArtifactFromPhase);
+phaseRoute.post("/scanner/add", addScannerToPhase);
+// phaseRoute.post("/scanner/remove", removeScannerFromPhase); // Commented out as it is not exported
 export default phaseRoute;
