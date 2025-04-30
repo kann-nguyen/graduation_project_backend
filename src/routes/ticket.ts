@@ -1,4 +1,4 @@
-import { create, get, getAll, testAutoCreateTickets, update, updateState } from "../controllers/ticket.controller";
+import { create, get, getAll, update, updateState } from "../controllers/ticket.controller";
 import express from "express";
 import { checkPermission } from "../middlewares/permission";
 const ticketRoute = express.Router();
@@ -9,5 +9,4 @@ ticketRoute.get("/:id", checkPermission("ticket:read"), get);
 ticketRoute.post("/", create);
 ticketRoute.patch("/:id", checkPermission("ticket:update"), update);
 ticketRoute.patch("/:id/state", updateState);
-ticketRoute.post("/test", testAutoCreateTickets);
 export default ticketRoute;

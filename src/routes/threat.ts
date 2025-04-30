@@ -1,6 +1,7 @@
 import { create, getAll, get, update } from "../controllers/threat.controller";
 import express from "express";
 import { getDetailedThreatInfo, getSuggestedFixes } from "../controllers/threatModeling.controller";
+import { updateRateScan } from "../controllers/artifact.controller";
 const threatRoute = express.Router();
 threatRoute.get("/", getAll);
 threatRoute.get("/:id", get);

@@ -1,82 +1,2893 @@
 {
-  "sourceInfo": {
-    "name": "CWE to STRIDE mapping",
-    "references": [
-      {
-        "name": "Microsoft STRIDE for CWE mapping research",
-        "url": "https://cwe.mitre.org/documents/sources/ArchitectureAndThreatModelingMicrosoftCorporation.pdf"
-      },
-      {
-        "name": "Towards Practical Cybersecurity Mapping of STRIDE and CWE",
-        "url": "https://www.researchgate.net/publication/351864310_Towards_Practical_Cybersecurity_Mapping_of_STRIDE_and_CWE_-_a_Multi-perspective_Approach"
-      },
-      {
-        "name": "MITRE CWE official documentation",
-        "url": "https://cwe.mitre.org/"
-      }
-    ]
-  },
-  "CWE-22": ["Information Disclosure", "Tampering"],
-  "CWE-59": ["Information Disclosure", "Tampering"],
-  "CWE-78": ["Elevation of Privilege", "Tampering"],
-  "CWE-79": ["Tampering", "Information Disclosure"],
-  "CWE-89": ["Tampering", "Information Disclosure", "Elevation of Privilege"],
-  "CWE-94": ["Elevation of Privilege", "Tampering"],
-  "CWE-119": ["Information Disclosure", "Tampering", "Elevation of Privilege"],
-  "CWE-125": ["Information Disclosure"],
-  "CWE-200": ["Information Disclosure"],
-  "CWE-269": ["Elevation of Privilege"],
-  "CWE-276": ["Elevation of Privilege"],
-  "CWE-284": ["Elevation of Privilege"],
-  "CWE-287": ["Spoofing"],
-  "CWE-295": ["Spoofing"],
-  "CWE-306": ["Spoofing", "Elevation of Privilege"],
-  "CWE-307": ["Spoofing", "Denial of Service"],
-  "CWE-311": ["Information Disclosure"],
-  "CWE-326": ["Information Disclosure"],
-  "CWE-352": ["Spoofing", "Elevation of Privilege"],
-  "CWE-362": ["Elevation of Privilege", "Denial of Service"],
-  "CWE-400": ["Denial of Service"],
-  "CWE-434": ["Elevation of Privilege", "Tampering"],
-  "CWE-476": ["Denial of Service"],
-  "CWE-502": ["Elevation of Privilege"],
-  "CWE-522": ["Spoofing", "Information Disclosure"],
-  "CWE-601": ["Information Disclosure", "Spoofing"],
-  "CWE-611": ["Information Disclosure", "Tampering"],
-  "CWE-613": ["Spoofing"],
-  "CWE-732": ["Elevation of Privilege", "Information Disclosure", "Tampering"],
-  "CWE-798": ["Spoofing"],
-  "CWE-862": ["Elevation of Privilege"],
-  "CWE-863": ["Elevation of Privilege"],
-  "CWE-918": ["Information Disclosure", "Tampering", "Elevation of Privilege"],
-  "CWE-20": ["Tampering", "Denial of Service"],
-  "CWE-77": ["Elevation of Privilege", "Tampering"],
-  "CWE-120": ["Information Disclosure", "Tampering", "Elevation of Privilege"],
-  "CWE-190": ["Denial of Service"],
-  "CWE-203": ["Information Disclosure"],
-  "CWE-209": ["Information Disclosure"],
-  "CWE-250": ["Elevation of Privilege"],
-  "CWE-275": ["Elevation of Privilege"],
-  "CWE-285": ["Elevation of Privilege"],
-  "CWE-290": ["Spoofing"],
-  "CWE-294": ["Spoofing"],
-  "CWE-304": ["Spoofing"],
-  "CWE-312": ["Information Disclosure"],
-  "CWE-319": ["Information Disclosure"],
-  "CWE-327": ["Information Disclosure"],
-  "CWE-345": ["Repudiation"],
-  "CWE-346": ["Spoofing"],
-  "CWE-369": ["Denial of Service"],
-  "CWE-425": ["Elevation of Privilege", "Information Disclosure"],
-  "CWE-494": ["Elevation of Privilege", "Tampering"],
-  "CWE-642": ["Information Disclosure"],
-  "CWE-770": ["Denial of Service"],
-  "CWE-915": ["Elevation of Privilege", "Information Disclosure"],
-  "CWE-489": ["Repudiation"],
-  "CWE-491": ["Repudiation"],
-  "CWE-493": ["Repudiation"],
-  "CWE-354": ["Repudiation"],
-  "CWE-778": ["Denial of Service"],
-  "CWE-799": ["Denial of Service"],
-  "CWE-834": ["Denial of Service"]
+  "CWE-5": [
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-6": [
+    "Elevation of Privilege"
+  ],
+  "CWE-7": [
+    "Information Disclosure"
+  ],
+  "CWE-8": [
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-11": [
+    "Information Disclosure"
+  ],
+  "CWE-12": [
+    "Information Disclosure"
+  ],
+  "CWE-13": [
+    "Elevation of Privilege"
+  ],
+  "CWE-14": [
+    "Elevation of Privilege",
+    "Information Disclosure"
+  ],
+  "CWE-20": [
+    "Denial of Service",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-22": [
+    "Denial of Service",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-23": [
+    "Denial of Service",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-24": [
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-25": [
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-26": [
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-27": [
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-28": [
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-29": [
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-30": [
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-31": [
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-32": [
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-33": [
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-34": [
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-35": [
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-36": [
+    "Denial of Service",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-37": [
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-38": [
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-39": [
+    "Denial of Service",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-40": [
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-41": [
+    "Elevation of Privilege",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-42": [
+    "Elevation of Privilege"
+  ],
+  "CWE-43": [
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-44": [
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-45": [
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-46": [
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-47": [
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-48": [
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-49": [
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-50": [
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-51": [
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-52": [
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-53": [
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-54": [
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-55": [
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-56": [
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-57": [
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-58": [
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-59": [
+    "Elevation of Privilege",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-61": [
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-62": [
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-64": [
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-65": [
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-67": [
+    "Denial of Service",
+    "Information Disclosure"
+  ],
+  "CWE-69": [
+    "Elevation of Privilege"
+  ],
+  "CWE-72": [
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-73": [
+    "Denial of Service",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-74": [
+    "Elevation of Privilege",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-75": [
+    "Denial of Service",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-77": [
+    "Denial of Service",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-78": [
+    "Denial of Service",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-79": [
+    "Denial of Service",
+    "Elevation of Privilege",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-80": [
+    "Denial of Service",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-81": [
+    "Denial of Service",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-82": [
+    "Denial of Service",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-83": [
+    "Denial of Service",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-84": [
+    "Tampering"
+  ],
+  "CWE-85": [
+    "Denial of Service",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-86": [
+    "Denial of Service",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-87": [
+    "Denial of Service",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-88": [
+    "Denial of Service",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-89": [
+    "Denial of Service",
+    "Elevation of Privilege",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-90": [
+    "Denial of Service",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-91": [
+    "Denial of Service",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-93": [
+    "Tampering"
+  ],
+  "CWE-94": [
+    "Denial of Service",
+    "Elevation of Privilege",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-95": [
+    "Denial of Service",
+    "Elevation of Privilege",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-96": [
+    "Denial of Service",
+    "Elevation of Privilege",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-97": [
+    "Denial of Service",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-98": [
+    "Denial of Service",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-99": [
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-102": [
+    "Tampering"
+  ],
+  "CWE-103": [
+    "Denial of Service",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-104": [
+    "Denial of Service",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-105": [
+    "Tampering"
+  ],
+  "CWE-106": [
+    "Tampering"
+  ],
+  "CWE-108": [
+    "Denial of Service",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-109": [
+    "Elevation of Privilege"
+  ],
+  "CWE-111": [
+    "Elevation of Privilege"
+  ],
+  "CWE-112": [
+    "Tampering"
+  ],
+  "CWE-113": [
+    "Elevation of Privilege",
+    "Tampering"
+  ],
+  "CWE-114": [
+    "Denial of Service",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-115": [
+    "Tampering"
+  ],
+  "CWE-116": [
+    "Denial of Service",
+    "Elevation of Privilege",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-117": [
+    "Denial of Service",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-119": [
+    "Denial of Service",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-120": [
+    "Denial of Service",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-121": [
+    "Denial of Service",
+    "Elevation of Privilege",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-122": [
+    "Denial of Service",
+    "Elevation of Privilege",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-123": [
+    "Denial of Service",
+    "Elevation of Privilege",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-124": [
+    "Denial of Service",
+    "Elevation of Privilege",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-125": [
+    "Denial of Service",
+    "Information Disclosure"
+  ],
+  "CWE-126": [
+    "Denial of Service",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-127": [
+    "Information Disclosure"
+  ],
+  "CWE-128": [
+    "Denial of Service",
+    "Elevation of Privilege",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-129": [
+    "Denial of Service",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-130": [
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-131": [
+    "Denial of Service",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-134": [
+    "Denial of Service",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-135": [
+    "Denial of Service",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-138": [
+    "Denial of Service",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-140": [
+    "Tampering"
+  ],
+  "CWE-141": [
+    "Tampering"
+  ],
+  "CWE-142": [
+    "Tampering"
+  ],
+  "CWE-143": [
+    "Tampering"
+  ],
+  "CWE-144": [
+    "Tampering"
+  ],
+  "CWE-145": [
+    "Tampering"
+  ],
+  "CWE-146": [
+    "Denial of Service",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-147": [
+    "Tampering"
+  ],
+  "CWE-148": [
+    "Tampering"
+  ],
+  "CWE-149": [
+    "Tampering"
+  ],
+  "CWE-150": [
+    "Tampering"
+  ],
+  "CWE-151": [
+    "Tampering"
+  ],
+  "CWE-152": [
+    "Tampering"
+  ],
+  "CWE-153": [
+    "Tampering"
+  ],
+  "CWE-154": [
+    "Tampering"
+  ],
+  "CWE-155": [
+    "Tampering"
+  ],
+  "CWE-156": [
+    "Tampering"
+  ],
+  "CWE-157": [
+    "Tampering"
+  ],
+  "CWE-158": [
+    "Tampering"
+  ],
+  "CWE-159": [
+    "Tampering"
+  ],
+  "CWE-160": [
+    "Tampering"
+  ],
+  "CWE-161": [
+    "Tampering"
+  ],
+  "CWE-162": [
+    "Tampering"
+  ],
+  "CWE-163": [
+    "Tampering"
+  ],
+  "CWE-164": [
+    "Tampering"
+  ],
+  "CWE-165": [
+    "Tampering"
+  ],
+  "CWE-166": [
+    "Denial of Service"
+  ],
+  "CWE-167": [
+    "Tampering"
+  ],
+  "CWE-168": [
+    "Denial of Service",
+    "Elevation of Privilege"
+  ],
+  "CWE-170": [
+    "Denial of Service",
+    "Elevation of Privilege",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-172": [
+    "Tampering"
+  ],
+  "CWE-173": [
+    "Elevation of Privilege"
+  ],
+  "CWE-174": [
+    "Denial of Service",
+    "Elevation of Privilege",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-175": [
+    "Tampering"
+  ],
+  "CWE-176": [
+    "Tampering"
+  ],
+  "CWE-177": [
+    "Tampering"
+  ],
+  "CWE-178": [
+    "Elevation of Privilege"
+  ],
+  "CWE-179": [
+    "Elevation of Privilege",
+    "Tampering"
+  ],
+  "CWE-180": [
+    "Elevation of Privilege"
+  ],
+  "CWE-181": [
+    "Elevation of Privilege"
+  ],
+  "CWE-182": [
+    "Elevation of Privilege"
+  ],
+  "CWE-183": [
+    "Elevation of Privilege"
+  ],
+  "CWE-184": [
+    "Elevation of Privilege"
+  ],
+  "CWE-185": [
+    "Elevation of Privilege"
+  ],
+  "CWE-186": [
+    "Elevation of Privilege"
+  ],
+  "CWE-187": [
+    "Elevation of Privilege",
+    "Tampering"
+  ],
+  "CWE-188": [
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-190": [
+    "Denial of Service",
+    "Elevation of Privilege",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-191": [
+    "Denial of Service",
+    "Elevation of Privilege",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-192": [
+    "Denial of Service",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-193": [
+    "Denial of Service",
+    "Elevation of Privilege",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-194": [
+    "Denial of Service",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-195": [
+    "Tampering"
+  ],
+  "CWE-196": [
+    "Denial of Service",
+    "Elevation of Privilege",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-197": [
+    "Tampering"
+  ],
+  "CWE-198": [
+    "Tampering"
+  ],
+  "CWE-200": [
+    "Information Disclosure"
+  ],
+  "CWE-201": [
+    "Information Disclosure"
+  ],
+  "CWE-202": [
+    "Information Disclosure"
+  ],
+  "CWE-203": [
+    "Elevation of Privilege",
+    "Information Disclosure"
+  ],
+  "CWE-204": [
+    "Elevation of Privilege",
+    "Information Disclosure"
+  ],
+  "CWE-205": [
+    "Elevation of Privilege",
+    "Information Disclosure"
+  ],
+  "CWE-206": [
+    "Elevation of Privilege",
+    "Information Disclosure"
+  ],
+  "CWE-207": [
+    "Elevation of Privilege",
+    "Information Disclosure"
+  ],
+  "CWE-208": [
+    "Elevation of Privilege",
+    "Information Disclosure"
+  ],
+  "CWE-209": [
+    "Information Disclosure"
+  ],
+  "CWE-210": [
+    "Information Disclosure"
+  ],
+  "CWE-211": [
+    "Information Disclosure"
+  ],
+  "CWE-212": [
+    "Information Disclosure"
+  ],
+  "CWE-213": [
+    "Information Disclosure"
+  ],
+  "CWE-214": [
+    "Information Disclosure"
+  ],
+  "CWE-215": [
+    "Information Disclosure"
+  ],
+  "CWE-219": [
+    "Information Disclosure"
+  ],
+  "CWE-220": [
+    "Information Disclosure"
+  ],
+  "CWE-224": [
+    "Elevation of Privilege"
+  ],
+  "CWE-226": [
+    "Information Disclosure"
+  ],
+  "CWE-228": [
+    "Denial of Service",
+    "Tampering"
+  ],
+  "CWE-229": [
+    "Tampering"
+  ],
+  "CWE-230": [
+    "Tampering"
+  ],
+  "CWE-231": [
+    "Tampering"
+  ],
+  "CWE-232": [
+    "Tampering"
+  ],
+  "CWE-233": [
+    "Tampering"
+  ],
+  "CWE-234": [
+    "Denial of Service",
+    "Elevation of Privilege",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-235": [
+    "Tampering"
+  ],
+  "CWE-236": [
+    "Tampering"
+  ],
+  "CWE-237": [
+    "Tampering"
+  ],
+  "CWE-238": [
+    "Tampering"
+  ],
+  "CWE-239": [
+    "Tampering"
+  ],
+  "CWE-240": [
+    "Tampering"
+  ],
+  "CWE-241": [
+    "Tampering"
+  ],
+  "CWE-243": [
+    "Information Disclosure"
+  ],
+  "CWE-244": [
+    "Information Disclosure"
+  ],
+  "CWE-248": [
+    "Denial of Service",
+    "Information Disclosure"
+  ],
+  "CWE-250": [
+    "Denial of Service",
+    "Elevation of Privilege",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-252": [
+    "Denial of Service",
+    "Tampering"
+  ],
+  "CWE-253": [
+    "Denial of Service",
+    "Tampering"
+  ],
+  "CWE-256": [
+    "Elevation of Privilege"
+  ],
+  "CWE-257": [
+    "Elevation of Privilege",
+    "Information Disclosure"
+  ],
+  "CWE-258": [
+    "Elevation of Privilege"
+  ],
+  "CWE-259": [
+    "Elevation of Privilege"
+  ],
+  "CWE-260": [
+    "Elevation of Privilege"
+  ],
+  "CWE-261": [
+    "Elevation of Privilege"
+  ],
+  "CWE-262": [
+    "Elevation of Privilege"
+  ],
+  "CWE-263": [
+    "Elevation of Privilege"
+  ],
+  "CWE-266": [
+    "Elevation of Privilege"
+  ],
+  "CWE-267": [
+    "Elevation of Privilege"
+  ],
+  "CWE-268": [
+    "Elevation of Privilege"
+  ],
+  "CWE-269": [
+    "Elevation of Privilege"
+  ],
+  "CWE-270": [
+    "Elevation of Privilege"
+  ],
+  "CWE-271": [
+    "Elevation of Privilege"
+  ],
+  "CWE-272": [
+    "Elevation of Privilege",
+    "Information Disclosure"
+  ],
+  "CWE-273": [
+    "Elevation of Privilege"
+  ],
+  "CWE-276": [
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-277": [
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-278": [
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-279": [
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-281": [
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-282": [
+    "Elevation of Privilege"
+  ],
+  "CWE-283": [
+    "Elevation of Privilege"
+  ],
+  "CWE-285": [
+    "Elevation of Privilege",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-287": [
+    "Denial of Service",
+    "Elevation of Privilege",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-288": [
+    "Elevation of Privilege"
+  ],
+  "CWE-289": [
+    "Elevation of Privilege"
+  ],
+  "CWE-290": [
+    "Elevation of Privilege"
+  ],
+  "CWE-291": [
+    "Elevation of Privilege"
+  ],
+  "CWE-293": [
+    "Elevation of Privilege"
+  ],
+  "CWE-294": [
+    "Elevation of Privilege"
+  ],
+  "CWE-295": [
+    "Tampering"
+  ],
+  "CWE-296": [
+    "Denial of Service",
+    "Elevation of Privilege",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-297": [
+    "Elevation of Privilege"
+  ],
+  "CWE-298": [
+    "Tampering"
+  ],
+  "CWE-299": [
+    "Elevation of Privilege",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-300": [
+    "Elevation of Privilege",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-301": [
+    "Elevation of Privilege"
+  ],
+  "CWE-302": [
+    "Elevation of Privilege"
+  ],
+  "CWE-303": [
+    "Elevation of Privilege"
+  ],
+  "CWE-304": [
+    "Elevation of Privilege",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-305": [
+    "Elevation of Privilege"
+  ],
+  "CWE-306": [
+    "Elevation of Privilege"
+  ],
+  "CWE-307": [
+    "Elevation of Privilege"
+  ],
+  "CWE-308": [
+    "Elevation of Privilege"
+  ],
+  "CWE-309": [
+    "Elevation of Privilege"
+  ],
+  "CWE-311": [
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-312": [
+    "Information Disclosure"
+  ],
+  "CWE-313": [
+    "Information Disclosure"
+  ],
+  "CWE-314": [
+    "Information Disclosure"
+  ],
+  "CWE-315": [
+    "Information Disclosure"
+  ],
+  "CWE-316": [
+    "Information Disclosure"
+  ],
+  "CWE-317": [
+    "Information Disclosure"
+  ],
+  "CWE-318": [
+    "Information Disclosure"
+  ],
+  "CWE-319": [
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-321": [
+    "Elevation of Privilege"
+  ],
+  "CWE-322": [
+    "Elevation of Privilege",
+    "Information Disclosure"
+  ],
+  "CWE-323": [
+    "Elevation of Privilege"
+  ],
+  "CWE-324": [
+    "Elevation of Privilege"
+  ],
+  "CWE-325": [
+    "Elevation of Privilege",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-326": [
+    "Elevation of Privilege",
+    "Information Disclosure"
+  ],
+  "CWE-327": [
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-328": [
+    "Elevation of Privilege"
+  ],
+  "CWE-329": [
+    "Information Disclosure"
+  ],
+  "CWE-330": [
+    "Elevation of Privilege",
+    "Information Disclosure"
+  ],
+  "CWE-331": [
+    "Elevation of Privilege"
+  ],
+  "CWE-332": [
+    "Denial of Service",
+    "Elevation of Privilege"
+  ],
+  "CWE-333": [
+    "Denial of Service"
+  ],
+  "CWE-334": [
+    "Elevation of Privilege"
+  ],
+  "CWE-335": [
+    "Elevation of Privilege"
+  ],
+  "CWE-336": [
+    "Elevation of Privilege"
+  ],
+  "CWE-338": [
+    "Elevation of Privilege"
+  ],
+  "CWE-345": [
+    "Tampering"
+  ],
+  "CWE-346": [
+    "Elevation of Privilege"
+  ],
+  "CWE-347": [
+    "Elevation of Privilege",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-348": [
+    "Elevation of Privilege"
+  ],
+  "CWE-349": [
+    "Elevation of Privilege",
+    "Tampering"
+  ],
+  "CWE-350": [
+    "Elevation of Privilege"
+  ],
+  "CWE-352": [
+    "Denial of Service",
+    "Elevation of Privilege",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-353": [
+    "Tampering"
+  ],
+  "CWE-354": [
+    "Tampering"
+  ],
+  "CWE-358": [
+    "Elevation of Privilege"
+  ],
+  "CWE-359": [
+    "Information Disclosure"
+  ],
+  "CWE-360": [
+    "Denial of Service",
+    "Elevation of Privilege",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-362": [
+    "Denial of Service",
+    "Elevation of Privilege",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-363": [
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-364": [
+    "Denial of Service",
+    "Elevation of Privilege",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-366": [
+    "Tampering"
+  ],
+  "CWE-367": [
+    "Tampering"
+  ],
+  "CWE-368": [
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-369": [
+    "Denial of Service"
+  ],
+  "CWE-370": [
+    "Elevation of Privilege",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-372": [
+    "Tampering"
+  ],
+  "CWE-374": [
+    "Tampering"
+  ],
+  "CWE-375": [
+    "Elevation of Privilege",
+    "Tampering"
+  ],
+  "CWE-377": [
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-378": [
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-379": [
+    "Information Disclosure"
+  ],
+  "CWE-382": [
+    "Denial of Service"
+  ],
+  "CWE-384": [
+    "Elevation of Privilege"
+  ],
+  "CWE-385": [
+    "Information Disclosure"
+  ],
+  "CWE-386": [
+    "Elevation of Privilege",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-390": [
+    "Tampering"
+  ],
+  "CWE-391": [
+    "Tampering"
+  ],
+  "CWE-392": [
+    "Tampering"
+  ],
+  "CWE-393": [
+    "Tampering"
+  ],
+  "CWE-394": [
+    "Tampering"
+  ],
+  "CWE-395": [
+    "Denial of Service"
+  ],
+  "CWE-400": [
+    "Denial of Service",
+    "Elevation of Privilege"
+  ],
+  "CWE-401": [
+    "Denial of Service"
+  ],
+  "CWE-402": [
+    "Information Disclosure"
+  ],
+  "CWE-403": [
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-404": [
+    "Denial of Service",
+    "Information Disclosure"
+  ],
+  "CWE-405": [
+    "Denial of Service"
+  ],
+  "CWE-406": [
+    "Denial of Service"
+  ],
+  "CWE-407": [
+    "Denial of Service"
+  ],
+  "CWE-408": [
+    "Denial of Service"
+  ],
+  "CWE-409": [
+    "Denial of Service"
+  ],
+  "CWE-410": [
+    "Denial of Service",
+    "Tampering"
+  ],
+  "CWE-412": [
+    "Denial of Service"
+  ],
+  "CWE-413": [
+    "Denial of Service",
+    "Tampering"
+  ],
+  "CWE-414": [
+    "Denial of Service",
+    "Tampering"
+  ],
+  "CWE-415": [
+    "Denial of Service",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-416": [
+    "Denial of Service",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-419": [
+    "Elevation of Privilege"
+  ],
+  "CWE-420": [
+    "Elevation of Privilege"
+  ],
+  "CWE-421": [
+    "Elevation of Privilege"
+  ],
+  "CWE-422": [
+    "Elevation of Privilege"
+  ],
+  "CWE-424": [
+    "Elevation of Privilege"
+  ],
+  "CWE-425": [
+    "Denial of Service",
+    "Elevation of Privilege",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-426": [
+    "Denial of Service",
+    "Elevation of Privilege",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-427": [
+    "Denial of Service",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-428": [
+    "Denial of Service",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-430": [
+    "Tampering"
+  ],
+  "CWE-432": [
+    "Tampering"
+  ],
+  "CWE-433": [
+    "Information Disclosure"
+  ],
+  "CWE-434": [
+    "Denial of Service",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-435": [
+    "Tampering"
+  ],
+  "CWE-436": [
+    "Tampering"
+  ],
+  "CWE-437": [
+    "Tampering"
+  ],
+  "CWE-441": [
+    "Elevation of Privilege"
+  ],
+  "CWE-444": [
+    "Elevation of Privilege",
+    "Tampering"
+  ],
+  "CWE-451": [
+    "Elevation of Privilege"
+  ],
+  "CWE-453": [
+    "Tampering"
+  ],
+  "CWE-454": [
+    "Tampering"
+  ],
+  "CWE-455": [
+    "Tampering"
+  ],
+  "CWE-456": [
+    "Tampering"
+  ],
+  "CWE-457": [
+    "Denial of Service",
+    "Tampering"
+  ],
+  "CWE-459": [
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-463": [
+    "Denial of Service"
+  ],
+  "CWE-464": [
+    "Tampering"
+  ],
+  "CWE-466": [
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-467": [
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-468": [
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-469": [
+    "Denial of Service",
+    "Elevation of Privilege",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-470": [
+    "Denial of Service",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-471": [
+    "Tampering"
+  ],
+  "CWE-472": [
+    "Tampering"
+  ],
+  "CWE-473": [
+    "Tampering"
+  ],
+  "CWE-476": [
+    "Denial of Service",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-478": [
+    "Tampering"
+  ],
+  "CWE-479": [
+    "Denial of Service",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-482": [
+    "Denial of Service",
+    "Tampering"
+  ],
+  "CWE-483": [
+    "Denial of Service",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-486": [
+    "Denial of Service",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-487": [
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-488": [
+    "Information Disclosure"
+  ],
+  "CWE-489": [
+    "Denial of Service",
+    "Elevation of Privilege",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-491": [
+    "Tampering"
+  ],
+  "CWE-492": [
+    "Information Disclosure"
+  ],
+  "CWE-493": [
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-494": [
+    "Denial of Service",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-495": [
+    "Tampering"
+  ],
+  "CWE-496": [
+    "Tampering"
+  ],
+  "CWE-497": [
+    "Information Disclosure"
+  ],
+  "CWE-498": [
+    "Elevation of Privilege"
+  ],
+  "CWE-499": [
+    "Information Disclosure"
+  ],
+  "CWE-500": [
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-501": [
+    "Elevation of Privilege"
+  ],
+  "CWE-502": [
+    "Denial of Service",
+    "Tampering"
+  ],
+  "CWE-506": [
+    "Denial of Service",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-507": [
+    "Denial of Service",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-508": [
+    "Denial of Service",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-509": [
+    "Denial of Service",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-510": [
+    "Denial of Service",
+    "Elevation of Privilege",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-511": [
+    "Tampering"
+  ],
+  "CWE-512": [
+    "Information Disclosure"
+  ],
+  "CWE-514": [
+    "Elevation of Privilege",
+    "Information Disclosure"
+  ],
+  "CWE-515": [
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-520": [
+    "Elevation of Privilege"
+  ],
+  "CWE-521": [
+    "Elevation of Privilege"
+  ],
+  "CWE-522": [
+    "Elevation of Privilege"
+  ],
+  "CWE-523": [
+    "Elevation of Privilege"
+  ],
+  "CWE-524": [
+    "Information Disclosure"
+  ],
+  "CWE-525": [
+    "Information Disclosure"
+  ],
+  "CWE-526": [
+    "Information Disclosure"
+  ],
+  "CWE-527": [
+    "Information Disclosure"
+  ],
+  "CWE-528": [
+    "Information Disclosure"
+  ],
+  "CWE-529": [
+    "Elevation of Privilege",
+    "Information Disclosure"
+  ],
+  "CWE-530": [
+    "Information Disclosure"
+  ],
+  "CWE-531": [
+    "Information Disclosure"
+  ],
+  "CWE-532": [
+    "Information Disclosure"
+  ],
+  "CWE-535": [
+    "Information Disclosure"
+  ],
+  "CWE-536": [
+    "Information Disclosure"
+  ],
+  "CWE-537": [
+    "Information Disclosure"
+  ],
+  "CWE-538": [
+    "Information Disclosure"
+  ],
+  "CWE-539": [
+    "Information Disclosure"
+  ],
+  "CWE-540": [
+    "Information Disclosure"
+  ],
+  "CWE-541": [
+    "Information Disclosure"
+  ],
+  "CWE-543": [
+    "Tampering"
+  ],
+  "CWE-544": [
+    "Tampering"
+  ],
+  "CWE-548": [
+    "Information Disclosure"
+  ],
+  "CWE-549": [
+    "Elevation of Privilege"
+  ],
+  "CWE-550": [
+    "Information Disclosure"
+  ],
+  "CWE-551": [
+    "Elevation of Privilege"
+  ],
+  "CWE-552": [
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-553": [
+    "Denial of Service",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-554": [
+    "Tampering"
+  ],
+  "CWE-555": [
+    "Elevation of Privilege"
+  ],
+  "CWE-556": [
+    "Elevation of Privilege"
+  ],
+  "CWE-558": [
+    "Elevation of Privilege",
+    "Tampering"
+  ],
+  "CWE-560": [
+    "Elevation of Privilege",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-562": [
+    "Denial of Service",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-564": [
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-565": [
+    "Denial of Service",
+    "Elevation of Privilege",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-566": [
+    "Elevation of Privilege",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-567": [
+    "Denial of Service",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-578": [
+    "Denial of Service",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-580": [
+    "Tampering"
+  ],
+  "CWE-581": [
+    "Tampering"
+  ],
+  "CWE-582": [
+    "Tampering"
+  ],
+  "CWE-583": [
+    "Denial of Service",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-586": [
+    "Tampering"
+  ],
+  "CWE-587": [
+    "Denial of Service",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-588": [
+    "Denial of Service",
+    "Tampering"
+  ],
+  "CWE-590": [
+    "Denial of Service",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-591": [
+    "Information Disclosure"
+  ],
+  "CWE-593": [
+    "Elevation of Privilege",
+    "Information Disclosure"
+  ],
+  "CWE-594": [
+    "Denial of Service",
+    "Tampering"
+  ],
+  "CWE-598": [
+    "Information Disclosure"
+  ],
+  "CWE-599": [
+    "Elevation of Privilege",
+    "Information Disclosure"
+  ],
+  "CWE-600": [
+    "Denial of Service",
+    "Information Disclosure"
+  ],
+  "CWE-601": [
+    "Elevation of Privilege",
+    "Information Disclosure"
+  ],
+  "CWE-602": [
+    "Denial of Service",
+    "Elevation of Privilege"
+  ],
+  "CWE-603": [
+    "Elevation of Privilege"
+  ],
+  "CWE-605": [
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-606": [
+    "Denial of Service"
+  ],
+  "CWE-607": [
+    "Tampering"
+  ],
+  "CWE-608": [
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-609": [
+    "Tampering"
+  ],
+  "CWE-610": [
+    "Elevation of Privilege",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-611": [
+    "Denial of Service",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-612": [
+    "Information Disclosure"
+  ],
+  "CWE-613": [
+    "Elevation of Privilege"
+  ],
+  "CWE-614": [
+    "Information Disclosure"
+  ],
+  "CWE-615": [
+    "Information Disclosure"
+  ],
+  "CWE-616": [
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-617": [
+    "Denial of Service"
+  ],
+  "CWE-619": [
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-620": [
+    "Elevation of Privilege"
+  ],
+  "CWE-621": [
+    "Tampering"
+  ],
+  "CWE-622": [
+    "Tampering"
+  ],
+  "CWE-623": [
+    "Denial of Service",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-624": [
+    "Denial of Service",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-625": [
+    "Elevation of Privilege"
+  ],
+  "CWE-626": [
+    "Tampering"
+  ],
+  "CWE-627": [
+    "Denial of Service",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-628": [
+    "Elevation of Privilege"
+  ],
+  "CWE-636": [
+    "Elevation of Privilege"
+  ],
+  "CWE-638": [
+    "Denial of Service",
+    "Elevation of Privilege",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-639": [
+    "Elevation of Privilege"
+  ],
+  "CWE-640": [
+    "Denial of Service",
+    "Elevation of Privilege",
+    "Tampering"
+  ],
+  "CWE-641": [
+    "Denial of Service",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-642": [
+    "Denial of Service",
+    "Elevation of Privilege",
+    "Information Disclosure"
+  ],
+  "CWE-643": [
+    "Elevation of Privilege",
+    "Information Disclosure"
+  ],
+  "CWE-644": [
+    "Denial of Service",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-645": [
+    "Denial of Service"
+  ],
+  "CWE-646": [
+    "Denial of Service",
+    "Elevation of Privilege",
+    "Information Disclosure"
+  ],
+  "CWE-647": [
+    "Elevation of Privilege",
+    "Information Disclosure"
+  ],
+  "CWE-648": [
+    "Denial of Service",
+    "Elevation of Privilege",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-649": [
+    "Tampering"
+  ],
+  "CWE-650": [
+    "Elevation of Privilege",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-651": [
+    "Information Disclosure"
+  ],
+  "CWE-652": [
+    "Information Disclosure"
+  ],
+  "CWE-653": [
+    "Elevation of Privilege"
+  ],
+  "CWE-654": [
+    "Elevation of Privilege"
+  ],
+  "CWE-655": [
+    "Elevation of Privilege"
+  ],
+  "CWE-656": [
+    "Denial of Service",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-662": [
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-663": [
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-665": [
+    "Denial of Service",
+    "Elevation of Privilege",
+    "Information Disclosure"
+  ],
+  "CWE-667": [
+    "Denial of Service"
+  ],
+  "CWE-668": [
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-669": [
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-672": [
+    "Denial of Service",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-674": [
+    "Denial of Service",
+    "Information Disclosure"
+  ],
+  "CWE-680": [
+    "Denial of Service",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-681": [
+    "Tampering"
+  ],
+  "CWE-682": [
+    "Denial of Service",
+    "Elevation of Privilege",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-689": [
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-690": [
+    "Denial of Service",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-692": [
+    "Denial of Service",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-693": [
+    "Elevation of Privilege"
+  ],
+  "CWE-694": [
+    "Elevation of Privilege"
+  ],
+  "CWE-696": [
+    "Tampering"
+  ],
+  "CWE-698": [
+    "Denial of Service",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-703": [
+    "Denial of Service",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-706": [
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-708": [
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-732": [
+    "Elevation of Privilege",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-733": [
+    "Elevation of Privilege"
+  ],
+  "CWE-749": [
+    "Denial of Service",
+    "Elevation of Privilege",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-754": [
+    "Denial of Service",
+    "Tampering"
+  ],
+  "CWE-756": [
+    "Information Disclosure"
+  ],
+  "CWE-757": [
+    "Elevation of Privilege"
+  ],
+  "CWE-759": [
+    "Elevation of Privilege"
+  ],
+  "CWE-760": [
+    "Elevation of Privilege"
+  ],
+  "CWE-761": [
+    "Denial of Service",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-762": [
+    "Denial of Service",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-763": [
+    "Denial of Service",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-764": [
+    "Denial of Service",
+    "Tampering"
+  ],
+  "CWE-765": [
+    "Denial of Service",
+    "Tampering"
+  ],
+  "CWE-766": [
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-767": [
+    "Tampering"
+  ],
+  "CWE-768": [
+    "Denial of Service",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-770": [
+    "Denial of Service"
+  ],
+  "CWE-771": [
+    "Denial of Service"
+  ],
+  "CWE-772": [
+    "Denial of Service"
+  ],
+  "CWE-773": [
+    "Denial of Service"
+  ],
+  "CWE-774": [
+    "Denial of Service"
+  ],
+  "CWE-775": [
+    "Denial of Service"
+  ],
+  "CWE-776": [
+    "Denial of Service"
+  ],
+  "CWE-777": [
+    "Denial of Service",
+    "Elevation of Privilege",
+    "Information Disclosure"
+  ],
+  "CWE-779": [
+    "Denial of Service"
+  ],
+  "CWE-780": [
+    "Elevation of Privilege"
+  ],
+  "CWE-781": [
+    "Denial of Service",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-782": [
+    "Denial of Service",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-783": [
+    "Denial of Service",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-784": [
+    "Elevation of Privilege"
+  ],
+  "CWE-785": [
+    "Denial of Service",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-786": [
+    "Denial of Service",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-787": [
+    "Denial of Service",
+    "Tampering"
+  ],
+  "CWE-788": [
+    "Denial of Service",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-789": [
+    "Denial of Service"
+  ],
+  "CWE-790": [
+    "Tampering"
+  ],
+  "CWE-791": [
+    "Tampering"
+  ],
+  "CWE-792": [
+    "Tampering"
+  ],
+  "CWE-793": [
+    "Tampering"
+  ],
+  "CWE-794": [
+    "Tampering"
+  ],
+  "CWE-795": [
+    "Tampering"
+  ],
+  "CWE-796": [
+    "Tampering"
+  ],
+  "CWE-797": [
+    "Tampering"
+  ],
+  "CWE-798": [
+    "Denial of Service",
+    "Elevation of Privilege",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-799": [
+    "Denial of Service",
+    "Elevation of Privilege"
+  ],
+  "CWE-804": [
+    "Elevation of Privilege"
+  ],
+  "CWE-805": [
+    "Denial of Service",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-806": [
+    "Denial of Service",
+    "Elevation of Privilege",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-807": [
+    "Denial of Service",
+    "Elevation of Privilege",
+    "Information Disclosure"
+  ],
+  "CWE-820": [
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-821": [
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-822": [
+    "Denial of Service",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-823": [
+    "Denial of Service",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-824": [
+    "Denial of Service",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-825": [
+    "Denial of Service",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-826": [
+    "Denial of Service",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-827": [
+    "Denial of Service",
+    "Elevation of Privilege",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-828": [
+    "Denial of Service",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-829": [
+    "Denial of Service",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-830": [
+    "Denial of Service",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-831": [
+    "Denial of Service",
+    "Elevation of Privilege",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-832": [
+    "Denial of Service",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-833": [
+    "Denial of Service"
+  ],
+  "CWE-834": [
+    "Denial of Service"
+  ],
+  "CWE-835": [
+    "Denial of Service"
+  ],
+  "CWE-836": [
+    "Elevation of Privilege"
+  ],
+  "CWE-838": [
+    "Denial of Service",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-839": [
+    "Denial of Service",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-842": [
+    "Elevation of Privilege"
+  ],
+  "CWE-843": [
+    "Denial of Service",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-862": [
+    "Denial of Service",
+    "Elevation of Privilege",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-863": [
+    "Denial of Service",
+    "Elevation of Privilege",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-908": [
+    "Denial of Service",
+    "Information Disclosure"
+  ],
+  "CWE-909": [
+    "Denial of Service",
+    "Information Disclosure"
+  ],
+  "CWE-910": [
+    "Denial of Service",
+    "Information Disclosure"
+  ],
+  "CWE-911": [
+    "Denial of Service"
+  ],
+  "CWE-912": [
+    "Tampering"
+  ],
+  "CWE-913": [
+    "Tampering"
+  ],
+  "CWE-914": [
+    "Tampering"
+  ],
+  "CWE-915": [
+    "Tampering"
+  ],
+  "CWE-916": [
+    "Elevation of Privilege"
+  ],
+  "CWE-917": [
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-918": [
+    "Elevation of Privilege",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-920": [
+    "Denial of Service"
+  ],
+  "CWE-921": [
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-922": [
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-923": [
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-924": [
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-925": [
+    "Tampering"
+  ],
+  "CWE-926": [
+    "Denial of Service",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-927": [
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-940": [
+    "Elevation of Privilege"
+  ],
+  "CWE-942": [
+    "Denial of Service",
+    "Elevation of Privilege",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-943": [
+    "Denial of Service",
+    "Elevation of Privilege",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-1004": [
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-1007": [
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-1021": [
+    "Elevation of Privilege"
+  ],
+  "CWE-1022": [
+    "Information Disclosure"
+  ],
+  "CWE-1023": [
+    "Elevation of Privilege",
+    "Tampering"
+  ],
+  "CWE-1037": [
+    "Tampering"
+  ],
+  "CWE-1038": [
+    "Tampering"
+  ],
+  "CWE-1039": [
+    "Denial of Service",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-1173": [
+    "Tampering"
+  ],
+  "CWE-1174": [
+    "Tampering"
+  ],
+  "CWE-1176": [
+    "Denial of Service"
+  ],
+  "CWE-1189": [
+    "Elevation of Privilege",
+    "Tampering"
+  ],
+  "CWE-1190": [
+    "Elevation of Privilege"
+  ],
+  "CWE-1191": [
+    "Elevation of Privilege",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-1192": [
+    "Elevation of Privilege"
+  ],
+  "CWE-1193": [
+    "Elevation of Privilege"
+  ],
+  "CWE-1204": [
+    "Information Disclosure"
+  ],
+  "CWE-1209": [
+    "Denial of Service",
+    "Elevation of Privilege",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-1220": [
+    "Denial of Service",
+    "Elevation of Privilege",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-1221": [
+    "Denial of Service",
+    "Elevation of Privilege",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-1222": [
+    "Elevation of Privilege"
+  ],
+  "CWE-1223": [
+    "Elevation of Privilege"
+  ],
+  "CWE-1224": [
+    "Denial of Service",
+    "Elevation of Privilege",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-1231": [
+    "Elevation of Privilege"
+  ],
+  "CWE-1232": [
+    "Elevation of Privilege"
+  ],
+  "CWE-1233": [
+    "Elevation of Privilege"
+  ],
+  "CWE-1234": [
+    "Elevation of Privilege"
+  ],
+  "CWE-1235": [
+    "Denial of Service"
+  ],
+  "CWE-1236": [
+    "Information Disclosure"
+  ],
+  "CWE-1239": [
+    "Information Disclosure"
+  ],
+  "CWE-1240": [
+    "Information Disclosure"
+  ],
+  "CWE-1241": [
+    "Information Disclosure"
+  ],
+  "CWE-1242": [
+    "Denial of Service",
+    "Elevation of Privilege",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-1243": [
+    "Elevation of Privilege",
+    "Information Disclosure"
+  ],
+  "CWE-1244": [
+    "Elevation of Privilege",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-1245": [
+    "Denial of Service",
+    "Elevation of Privilege"
+  ],
+  "CWE-1246": [
+    "Denial of Service"
+  ],
+  "CWE-1247": [
+    "Denial of Service",
+    "Elevation of Privilege",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-1248": [
+    "Denial of Service",
+    "Elevation of Privilege"
+  ],
+  "CWE-1249": [
+    "Elevation of Privilege"
+  ],
+  "CWE-1251": [
+    "Denial of Service",
+    "Elevation of Privilege",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-1252": [
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-1253": [
+    "Denial of Service",
+    "Elevation of Privilege",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-1254": [
+    "Information Disclosure"
+  ],
+  "CWE-1255": [
+    "Denial of Service",
+    "Elevation of Privilege",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-1256": [
+    "Tampering"
+  ],
+  "CWE-1257": [
+    "Denial of Service",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-1258": [
+    "Elevation of Privilege",
+    "Information Disclosure"
+  ],
+  "CWE-1259": [
+    "Denial of Service",
+    "Elevation of Privilege",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-1260": [
+    "Denial of Service",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-1261": [
+    "Denial of Service",
+    "Elevation of Privilege"
+  ],
+  "CWE-1262": [
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-1263": [
+    "Elevation of Privilege",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-1264": [
+    "Information Disclosure"
+  ],
+  "CWE-1265": [
+    "Tampering"
+  ],
+  "CWE-1266": [
+    "Information Disclosure"
+  ],
+  "CWE-1267": [
+    "Denial of Service",
+    "Elevation of Privilege",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-1268": [
+    "Denial of Service",
+    "Elevation of Privilege",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-1269": [
+    "Denial of Service",
+    "Elevation of Privilege",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-1270": [
+    "Denial of Service",
+    "Elevation of Privilege",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-1271": [
+    "Elevation of Privilege"
+  ],
+  "CWE-1272": [
+    "Denial of Service",
+    "Elevation of Privilege",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-1273": [
+    "Denial of Service",
+    "Elevation of Privilege",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-1274": [
+    "Elevation of Privilege",
+    "Tampering"
+  ],
+  "CWE-1275": [
+    "Elevation of Privilege",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-1276": [
+    "Denial of Service",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-1277": [
+    "Elevation of Privilege",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-1278": [
+    "Information Disclosure"
+  ],
+  "CWE-1279": [
+    "Denial of Service",
+    "Elevation of Privilege",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-1280": [
+    "Elevation of Privilege",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-1281": [
+    "Denial of Service",
+    "Tampering"
+  ],
+  "CWE-1282": [
+    "Tampering"
+  ],
+  "CWE-1283": [
+    "Information Disclosure"
+  ],
+  "CWE-1290": [
+    "Denial of Service",
+    "Elevation of Privilege",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-1291": [
+    "Denial of Service",
+    "Elevation of Privilege",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-1292": [
+    "Denial of Service",
+    "Elevation of Privilege",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-1293": [
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-1294": [
+    "Denial of Service",
+    "Elevation of Privilege",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-1295": [
+    "Denial of Service",
+    "Elevation of Privilege",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-1296": [
+    "Denial of Service",
+    "Elevation of Privilege",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-1297": [
+    "Denial of Service",
+    "Elevation of Privilege",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-1298": [
+    "Elevation of Privilege"
+  ],
+  "CWE-1299": [
+    "Denial of Service",
+    "Elevation of Privilege",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-1300": [
+    "Information Disclosure"
+  ],
+  "CWE-1301": [
+    "Information Disclosure"
+  ],
+  "CWE-1302": [
+    "Denial of Service",
+    "Elevation of Privilege",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-1303": [
+    "Information Disclosure"
+  ],
+  "CWE-1304": [
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-1311": [
+    "Elevation of Privilege",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-1312": [
+    "Elevation of Privilege",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-1313": [
+    "Denial of Service",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-1314": [
+    "Denial of Service"
+  ],
+  "CWE-1315": [
+    "Elevation of Privilege"
+  ],
+  "CWE-1316": [
+    "Elevation of Privilege",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-1317": [
+    "Denial of Service",
+    "Elevation of Privilege",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-1318": [
+    "Denial of Service",
+    "Elevation of Privilege",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-1319": [
+    "Denial of Service",
+    "Elevation of Privilege",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-1320": [
+    "Denial of Service"
+  ],
+  "CWE-1321": [
+    "Denial of Service",
+    "Tampering"
+  ],
+  "CWE-1322": [
+    "Denial of Service"
+  ],
+  "CWE-1323": [
+    "Information Disclosure"
+  ],
+  "CWE-1325": [
+    "Denial of Service"
+  ],
+  "CWE-1327": [
+    "Denial of Service"
+  ],
+  "CWE-1328": [
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-1329": [
+    "Elevation of Privilege",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-1330": [
+    "Information Disclosure"
+  ],
+  "CWE-1331": [
+    "Denial of Service",
+    "Information Disclosure"
+  ],
+  "CWE-1332": [
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-1333": [
+    "Denial of Service"
+  ],
+  "CWE-1334": [
+    "Denial of Service",
+    "Tampering"
+  ],
+  "CWE-1335": [
+    "Tampering"
+  ],
+  "CWE-1336": [
+    "Tampering"
+  ],
+  "CWE-1338": [
+    "Denial of Service"
+  ],
+  "CWE-1339": [
+    "Denial of Service",
+    "Elevation of Privilege",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-1341": [
+    "Denial of Service",
+    "Tampering"
+  ],
+  "CWE-1342": [
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-1351": [
+    "Tampering"
+  ],
+  "CWE-1384": [
+    "Denial of Service",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-1385": [
+    "Denial of Service",
+    "Elevation of Privilege",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-1386": [
+    "Denial of Service",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-1389": [
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-1390": [
+    "Denial of Service",
+    "Elevation of Privilege",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-1395": [
+    "Denial of Service",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-1419": [
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-1420": [
+    "Information Disclosure"
+  ],
+  "CWE-1421": [
+    "Information Disclosure"
+  ],
+  "CWE-1422": [
+    "Information Disclosure"
+  ],
+  "CWE-1423": [
+    "Information Disclosure"
+  ],
+  "CWE-1426": [
+    "Tampering"
+  ],
+  "CWE-1427": [
+    "Denial of Service",
+    "Elevation of Privilege",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-1428": [
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-1429": [
+    "Denial of Service",
+    "Information Disclosure",
+    "Tampering"
+  ],
+  "CWE-1431": [
+    "Information Disclosure"
+  ]
 }

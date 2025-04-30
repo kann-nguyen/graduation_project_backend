@@ -95,6 +95,41 @@ export async function update(req: Request, res: Response) {
   }
 }
 
+export async function updateRateScan(req: Request, res: Response) {
+  const { id } = req.params;
+  const { data } = req.body;
+  const { rate } = data;
+
+  //check xem role có phải manager không
+  const user = req.user;
+  if (!user || user.role !== "manager") {
+    return res.json(errorResponse("You are not authorized to update this artifact"));
+  }
+  
+  try {    
+    if (rate < 0 || rate > 100) {
+      return res.json(errorResponse("Rate must be between 0 and 100"));
+    }
+
+    // Cập nhật artifact với dữ liệu mới và danh sách threats
+    const artifact = await ArtifactModel.findByIdAndUpdate(
+      id,
+      {
+        rateReScan: rate// Gán danh sách threats vào artifact
+      },
+      {
+        new: true, // Trả về artifact sau khi đã cập nhật
+      }
+    );
+    
+    // Trả về artifact sau khi cập nhật thành công
+    return res.json(successResponse(artifact, "Rate re-scan updated successfully"));
+  } catch (error) {
+    // Xử lý lỗi nếu có vấn đề trong quá trình cập nhật
+    return res.json(error);
+  }
+}
+
 // Generate a threat from a vulnerability
 function createThreatFromVuln(vuln: any, artifactType: string): Partial<Threat> {
   const votes = getVotes(vuln);

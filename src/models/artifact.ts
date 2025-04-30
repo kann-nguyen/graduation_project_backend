@@ -52,6 +52,9 @@ export class Artifact extends TimeStamps {
   @prop({ default: 0 })
   public numberThreatSubmitted?: number; // số lượng threat đã xử lý (submit)
 
+  @prop({ default: 50 })
+  public rateReScan?: number; // số lượng threat đã xử lý (submit)
+
   @prop({ default: 0, select: false })
   public scannersCompleted?: number; // số lượng scanner đã hoàn thành
 

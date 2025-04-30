@@ -10,34 +10,24 @@ import { scanArtifact } from "./phase.controller";
  * @returns {Promise<Response>} - Trả về JSON response
  */
 export async function getAll(req: Request, res: Response) {
-  console.log('📥 [getAll] Incoming request with query:', req.query);
-  console.log('👤 [getAll] User ID from request:', req.user?._id);
-  
   const { projectName } = req.query;
   const userId = req.user?._id;
 
   if (!projectName) {
-    console.log('❌ [getAll] No project name provided');
     return res.json(errorResponse("Project name is required"));
   }
 
   try {
-    console.log(`🔍 [getAll] Looking for user with account:`, userId);
     // Get the user and their account to check role
     const user = await UserModel.findOne({ account: userId });
     if (!user) {
-      console.log('❌ [getAll] User not found for account:', userId);
       return res.json(errorResponse("User not found"));
     }
-    console.log('✅ [getAll] Found user:', { id: user._id, name: user.name });
 
-    console.log(`🔍 [getAll] Looking for account:`, user.account);
     const account = await AccountModel.findById(user.account);
     if (!account) {
-      console.log('❌ [getAll] Account not found for id:', user.account);
       return res.json(errorResponse("Account not found"));
     }
-    console.log('✅ [getAll] Found account with role:', account.role);
 
     // Create base query for tickets
     let query: { projectName: string; assignee?: string; status?: { $nin?: string[] } } = { 
@@ -50,15 +40,12 @@ export async function getAll(req: Request, res: Response) {
       query.status = { $nin: ["Not accepted", "Resolved"] };
     }
 
-    console.log('🔍 [getAll] Searching tickets with query:', JSON.stringify(query));
     const tickets = await TicketModel.find(query).populate({
       path: "assignee assigner",
     });
-    console.log(`✅ [getAll] Found ${tickets.length} tickets`);
 
     return res.json(successResponse(tickets, "Tickets fetched successfully"));
   } catch (error) {
-    console.error('❌ [getAll] Error fetching tickets:', error);
     return res.json(errorResponse(`Internal server error: ${error}`));
   }
 }
@@ -158,12 +145,10 @@ export async function autoCreateTicketFromThreat(artifactId: any, threatId: any)
     const artifact = await ArtifactModel.findById(artifactId);
 
     if (!threat) {
-      console.error(`❌ Threat with ID ${threatId} not found.`);
       return;
     }
 
     if (!artifact) {
-      console.error(`❌ Artifact with ID ${artifactId} not found.`);
       return;
     }
 
@@ -221,7 +206,6 @@ export async function updateState(req: Request, res: Response) {
     const currentTicket = await TicketModel.findById(ticketId).populate('assignee');
 
     if (!currentTicket) {
-      console.log('❌ Ticket not found');
       return res.json(errorResponse("Ticket not found"));
     }
 
@@ -231,29 +215,24 @@ export async function updateState(req: Request, res: Response) {
     });
 
     if (!user) {
-      console.log('❌ User not found');
       return res.json(errorResponse("User not found"));
     }
 
     const account = await AccountModel.findById(user.account);
 
     if (!account) {
-      console.log('❌ Account not found');
       return res.json(errorResponse("Account not found"));
     }
 
     if (currentTicket.status === "Not accepted" && data.status === "Processing") {
       if (account.role !== "manager") {
-        console.log('❌ Permission denied: Non-manager attempting to process ticket');
         return res.json(errorResponse("Only managers can change ticket to Processing state"));
       }
     } else if (currentTicket.status === "Processing" && data.status === "Submitted") {
       if (currentTicket.assignee?._id.toString() !== user._id.toString()) {
-        console.log('❌ Permission denied: Non-assignee attempting to submit ticket');
         return res.json(errorResponse("Only the assigned user can change ticket to Submitted state"));
       }
     } else {
-      console.log('❌ Invalid status transition attempted');
       return res.json(errorResponse("Invalid status transition"));
     }
 
@@ -269,7 +248,6 @@ export async function updateState(req: Request, res: Response) {
     ).populate('assignee');
 
     if (!ticket) {
-      console.log('❌ Ticket not found after update');
       return res.json(errorResponse("Ticket not found after update"));
     }
 
@@ -495,10 +473,10 @@ export async function suggestAssigneeFromThreatType(projectId: string, threatTyp
 
     // Check tỷ lệ threat đã submit
     const totalThreat = artifact.threatList?.length || 0;
-    const submittedRatio = (artifact.numberThreatSubmitted || 0) / totalThreat;
+    const submittedRatio = (artifact.numberThreatSubmitted || 0) / totalThreat * 100; // Tỷ lệ phần trăm đã submit
 
-    const managerConfigThreshold = 0.01; // Ví dụ Manager yêu cầu xử lý 50% threat
-
+    const managerConfigThreshold = artifact.rateReScan || 50; // Ví dụ Manager yêu cầu xử lý 50% threat
+    //add log to check rescan
     if (submittedRatio >= managerConfigThreshold && (artifact.totalScanners ?? 0) <= 0) {
       // Find the phase that contains this artifact
       const phase = await PhaseModel.findOne({ artifacts: artifact._id });
@@ -516,30 +494,5 @@ export async function suggestAssigneeFromThreatType(projectId: string, threatTyp
         console.error("[ERROR] Scanning failed:", error);
       }
     });
-    }
-  }
-
-  export async function testAutoCreateTickets(req: Request, res: Response) {
-    const { artifactId } = req.body;
-  
-    try {
-      const artifact = await ArtifactModel.findById(artifactId).populate("threatList");
-      if (!artifact) {
-        return res.status(404).json({ success: false, message: "Artifact not found" });
-      }
-  
-      if (!artifact.threatList || artifact.threatList.length === 0) {
-        return res.status(400).json({ success: false, message: "No threats found in the artifact" });
-      }
-
-      
-      for (const threat of artifact.threatList) {
-        await autoCreateTicketFromThreat(artifactId, threat._id);
-      }
-  
-      return res.status(200).json({ success: true, message: "Tickets created successfully" });
-    } catch (error) {
-      console.error(`❌ Error in testAutoCreateTickets: ${error}`);
-      return res.status(500).json({ success: false, message: "Internal server error" });
     }
   }
