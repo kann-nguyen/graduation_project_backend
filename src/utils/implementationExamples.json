@@ -1,0 +1,64 @@
+{
+  "Spoofing": [
+    {
+      "title": "Multi-Factor Authentication Integration",
+      "language": "JavaScript",
+      "description": "Example of integrating MFA with authentication flow",
+      "code": "// Server-side MFA verification example\nasync function verifyLogin(username, password, mfaCode) {\n  const user = await User.findOne({ username });\n  if (!user || !await user.validatePassword(password)) {\n    return { success: false, message: \"Invalid credentials\" };\n  }\n  \n  // Verify MFA code\n  const isMfaValid = await verifyMfaToken(user.mfaSecret, mfaCode);\n  if (!isMfaValid) {\n    return { success: false, message: \"Invalid MFA code\" };\n  }\n  \n  // Generate session token\n  const token = generateSecureToken(user);\n  return { success: true, token };\n}"
+    }
+  ],
+  
+  "Tampering": [
+    {
+      "title": "Input Validation Example",
+      "language": "JavaScript",
+      "description": "Implementing server-side input validation",
+      "code": "// Example of input validation middleware\nconst { body, validationResult } = require('express-validator');\n\n// Validation rules\nconst validateUserInput = [\n  body('email').isEmail().normalizeEmail(),\n  body('password').isLength({ min: 8 })\n    .matches(/^(?=.*\\d)(?=.*[a-z])(?=.*[A-Z])(?=.*[^a-zA-Z0-9]).{8,}$/),\n  body('name').trim().escape(),\n  \n  // Middleware to check results\n  (req, res, next) => {\n    const errors = validationResult(req);\n    if (!errors.isEmpty()) {\n      return res.status(400).json({ errors: errors.array() });\n    }\n    next();\n  }\n];\n\napp.post('/api/users', validateUserInput, createUser);"
+    }
+  ],
+  
+  "Information Disclosure": [
+    {
+      "title": "Data Encryption Example",
+      "language": "JavaScript",
+      "description": "Implementing field-level encryption for sensitive data",
+      "code": "// Field-level encryption example\nconst crypto = require('crypto');\nconst algorithm = 'aes-256-gcm';\n\n// Encrypt function\nfunction encryptField(text, masterKey) {\n  const iv = crypto.randomBytes(16);\n  const salt = crypto.randomBytes(64);\n  \n  // Key derivation\n  const key = crypto.pbkdf2Sync(masterKey, salt, 10000, 32, 'sha512');\n  \n  // Encryption\n  const cipher = crypto.createCipheriv(algorithm, key, iv);\n  let encrypted = cipher.update(text, 'utf8', 'hex');\n  encrypted += cipher.final('hex');\n  \n  // Get auth tag\n  const authTag = cipher.getAuthTag().toString('hex');\n  \n  // Return everything needed to decrypt\n  return {\n    iv: iv.toString('hex'),\n    salt: salt.toString('hex'),\n    encrypted,\n    authTag\n  };\n}"
+    }
+  ],
+  
+  "Repudiation": [
+    {
+      "title": "Secure Audit Logging",
+      "language": "JavaScript",
+      "description": "Implementing tamper-evident audit logging",
+      "code": "// Secure audit logging example\nconst crypto = require('crypto');\n\nclass SecureAuditLogger {\n  constructor(hmacKey) {\n    this.hmacKey = hmacKey;\n    this.logs = [];\n    this.previousHash = '';\n  }\n  \n  log(userId, action, resource) {\n    const timestamp = new Date().toISOString();\n    const logEntry = { userId, action, resource, timestamp };\n    \n    // Create hash that includes previous hash for tamper evidence\n    const entryStr = JSON.stringify(logEntry);\n    const hmac = crypto.createHmac('sha256', this.hmacKey);\n    hmac.update(this.previousHash + entryStr);\n    const hash = hmac.digest('hex');\n    \n    // Store hash with log entry\n    logEntry.hash = hash;\n    this.logs.push(logEntry);\n    this.previousHash = hash;\n    \n    return logEntry;\n  }\n  \n  verify() {\n    let prevHash = '';\n    \n    for (let i = 0; i < this.logs.length; i++) {\n      const entry = { ...this.logs[i] };\n      const storedHash = entry.hash;\n      delete entry.hash;\n      \n      const hmac = crypto.createHmac('sha256', this.hmacKey);\n      hmac.update(prevHash + JSON.stringify(entry));\n      const calcHash = hmac.digest('hex');\n      \n      if (calcHash !== storedHash) {\n        return { valid: false, tamperIndex: i };\n      }\n      \n      prevHash = storedHash;\n    }\n    \n    return { valid: true };\n  }\n}"
+    }
+  ],
+  
+  "Denial of Service": [
+    {
+      "title": "Rate Limiting Implementation",
+      "language": "JavaScript",
+      "description": "Implementing API rate limiting to prevent DoS",
+      "code": "// Rate limiting middleware with Redis\nconst redis = require('redis');\nconst client = redis.createClient();\n\n// Rate limiting middleware\nfunction rateLimiter(options) {\n  const { windowMs = 60000, max = 100, keyGenerator = (req) => req.ip } = options;\n  \n  return async (req, res, next) => {\n    const key = `ratelimit:${keyGenerator(req)}`;\n    \n    try {\n      // Get current count\n      const current = await client.get(key) || 0;\n      \n      if (current >= max) {\n        return res.status(429).json({\n          success: false,\n          message: 'Too many requests, please try again later.'\n        });\n      }\n      \n      // Increment and set expiry\n      await client.incr(key);\n      await client.expire(key, Math.floor(windowMs / 1000));\n      \n      // Add headers\n      res.setHeader('X-RateLimit-Limit', max);\n      res.setHeader('X-RateLimit-Remaining', max - current - 1);\n      \n      next();\n    } catch (error) {\n      // Fail open if Redis is unavailable\n      console.error('Rate limiting error:', error);\n      next();\n    }\n  };\n}\n\n// Apply middleware to sensitive routes\napp.use('/api/login', rateLimiter({ max: 10, windowMs: 60000 }));\napp.use('/api', rateLimiter({ max: 100, windowMs: 60000 }));"
+    }
+  ],
+  
+  "Elevation of Privilege": [
+    {
+      "title": "Authorization Middleware",
+      "language": "JavaScript",
+      "description": "Implementing role-based authorization",
+      "code": "// Role-based authorization middleware\nconst roles = {\n  USER: 'user',\n  ADMIN: 'admin',\n  MANAGER: 'manager'\n};\n\n// Permissions by role hierarchy\nconst roleHierarchy = {\n  [roles.USER]: ['read:own'],\n  [roles.MANAGER]: ['read:own', 'write:own', 'read:any'],\n  [roles.ADMIN]: ['read:own', 'write:own', 'read:any', 'write:any', 'delete:any']\n};\n\nfunction hasPermission(userRole, requiredPermission) {\n  if (!userRole || !roleHierarchy[userRole]) {\n    return false;\n  }\n  return roleHierarchy[userRole].includes(requiredPermission);\n}\n\nfunction authorize(permission) {\n  return (req, res, next) => {\n    // Get user from request (assumes authentication middleware ran first)\n    const user = req.user;\n    \n    if (!user) {\n      return res.status(401).json({ message: 'Authentication required' });\n    }\n    \n    if (hasPermission(user.role, permission)) {\n      return next(); // User has required permission\n    }\n    \n    return res.status(403).json({ message: 'Insufficient permissions' });\n  };\n}\n\n// Usage\napp.get('/api/users', authorize('read:any'), getAllUsers);\napp.delete('/api/users/:id', authorize('delete:any'), deleteUser);"
+    }
+  ],
+  
+  "default": [
+    {
+      "title": "Security Implementation Example",
+      "language": "JavaScript",
+      "description": "Generic security implementation",
+      "code": "// Example security middleware\nfunction securityMiddleware(req, res, next) {\n  // Set security headers\n  res.setHeader('Content-Security-Policy', \"default-src 'self'\");\n  res.setHeader('X-Content-Type-Options', 'nosniff');\n  res.setHeader('X-Frame-Options', 'DENY');\n  res.setHeader('Strict-Transport-Security', 'max-age=63072000; includeSubDomains');\n  next();\n}\n\napp.use(securityMiddleware);"
+    }
+  ]
+}

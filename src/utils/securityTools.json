@@ -1,0 +1,86 @@
+{
+  "common": [
+    {
+      "name": "OWASP ZAP",
+      "description": "Free security tool for finding vulnerabilities in web applications",
+      "url": "https://www.zaproxy.org/"
+    },
+    {
+      "name": "SonarQube",
+      "description": "Static code analysis for detecting security issues",
+      "url": "https://www.sonarqube.org/"
+    }
+  ],
+  "Spoofing": [
+    {
+      "name": "Keycloak",
+      "description": "Open source identity and access management solution",
+      "url": "https://www.keycloak.org/"
+    },
+    {
+      "name": "Auth0",
+      "description": "Identity platform for authentication and authorization",
+      "url": "https://auth0.com/"
+    }
+  ],
+  "Tampering": [
+    {
+      "name": "ModSecurity",
+      "description": "Web application firewall to protect against attacks",
+      "url": "https://modsecurity.org/"
+    },
+    {
+      "name": "JSON Web Tokens",
+      "description": "Technology for securely transmitting information",
+      "url": "https://jwt.io/"
+    }
+  ],
+  "Repudiation": [
+    {
+      "name": "ELK Stack",
+      "description": "Elasticsearch, Logstash, and Kibana for log management",
+      "url": "https://www.elastic.co/elk-stack"
+    },
+    {
+      "name": "AWS CloudTrail",
+      "description": "Service for governance, compliance, and auditing",
+      "url": "https://aws.amazon.com/cloudtrail/"
+    }
+  ],
+  "Information Disclosure": [
+    {
+      "name": "GitGuardian",
+      "description": "Scans for sensitive information in code",
+      "url": "https://www.gitguardian.com/"
+    },
+    {
+      "name": "HashiCorp Vault",
+      "description": "Tool for managing secrets and protecting sensitive data",
+      "url": "https://www.vaultproject.io/"
+    }
+  ],
+  "Denial of Service": [
+    {
+      "name": "Cloudflare",
+      "description": "DDoS protection and content delivery network",
+      "url": "https://www.cloudflare.com/"
+    },
+    {
+      "name": "AWS Shield",
+      "description": "Managed DDoS protection service",
+      "url": "https://aws.amazon.com/shield/"
+    }
+  ],
+  "Elevation of Privilege": [
+    {
+      "name": "OWASP Dependency-Check",
+      "description": "Identifies project dependencies with known vulnerabilities",
+      "url": "https://owasp.org/www-project-dependency-check/"
+    },
+    {
+      "name": "Snyk",
+      "description": "Finds and fixes vulnerabilities in open source dependencies",
+      "url": "https://snyk.io/"
+    }
+  ]
+}

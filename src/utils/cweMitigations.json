@@ -1,0 +1,57 @@
+{
+  "CWE-79": {
+    "title": "Prevent XSS",
+    "description": "Implement XSS prevention techniques",
+    "implementation": "Use context-sensitive output encoding and Content-Security-Policy"
+  },
+  "CWE-89": {
+    "title": "Prevent SQL Injection",
+    "description": "Implement SQL injection prevention techniques",
+    "implementation": "Use parameterized queries or prepared statements"
+  },
+  "CWE-78": {
+    "title": "Prevent Command Injection",
+    "description": "Implement command injection prevention techniques",
+    "implementation": "Validate and sanitize inputs, use allowlists for permitted commands"
+  },
+  "CWE-287": {
+    "title": "Strengthen Authentication",
+    "description": "Improve authentication mechanisms",
+    "implementation": "Implement multi-factor authentication and secure session management"
+  },
+  "CWE-20": {
+    "title": "Improve Input Validation",
+    "description": "Implement proper input validation",
+    "implementation": "Validate all input data against defined schemas and enforce strict type checking"
+  },
+  "CWE-22": {
+    "title": "Prevent Path Traversal",
+    "description": "Block directory traversal attacks",
+    "implementation": "Validate and sanitize file paths, use path canonicalization"
+  },
+  "CWE-352": {
+    "title": "Prevent CSRF",
+    "description": "Implement Cross-Site Request Forgery protections",
+    "implementation": "Use anti-CSRF tokens and validate origin/referer headers"
+  },
+  "CWE-434": {
+    "title": "Secure File Upload",
+    "description": "Implement secure file upload handling",
+    "implementation": "Validate file types, scan for malware, restrict file permissions"
+  },
+  "CWE-798": {
+    "title": "Remove Hardcoded Credentials",
+    "description": "Remove hardcoded credentials from code",
+    "implementation": "Use environment variables, config files, or secure credential stores"
+  },
+  "CWE-306": {
+    "title": "Implement Authentication",
+    "description": "Add missing authentication for critical functions",
+    "implementation": "Require proper authentication before accessing sensitive operations"
+  },
+  "CWE-601": {
+    "title": "Prevent Open Redirect",
+    "description": "Prevent open redirect vulnerabilities",
+    "implementation": "Validate redirect URLs against allowlist or use indirect reference maps"
+  }
+}

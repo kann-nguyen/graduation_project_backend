@@ -1,0 +1,156 @@
+{
+  "Spoofing": {
+    "description": "Identity spoofing threats involve attackers impersonating other entities or users",
+    "commonAttackVectors": ["Phishing attacks", "Credential theft", "Session hijacking", "Man-in-the-middle attacks"],
+    "securityPrinciples": ["Authentication", "Identity verification", "Trust boundaries"],
+    "officialSources": [
+      {
+        "name": "MITRE ATT&CK",
+        "url": "https://attack.mitre.org/techniques/T1566/",
+        "description": "Phishing techniques used in spoofing attacks"
+      },
+      {
+        "name": "NIST SP 800-63B",
+        "url": "https://pages.nist.gov/800-63-3/sp800-63b.html",
+        "description": "Digital Identity Guidelines - Authentication and Lifecycle Management"
+      },
+      {
+        "name": "OWASP Authentication Cheat Sheet",
+        "url": "https://cheatsheetseries.owasp.org/cheatsheets/Authentication_Cheat_Sheet.html",
+        "description": "Security best practices for authentication mechanisms"
+      }
+    ]
+  },
+  "Tampering": {
+    "description": "Tampering threats involve unauthorized modification of data or system behavior",
+    "commonAttackVectors": ["XSS attacks", "SQL injection", "Client-side tampering", "Data manipulation"],
+    "securityPrinciples": ["Integrity", "Input validation", "Access control"],
+    "officialSources": [
+      {
+        "name": "MITRE ATT&CK",
+        "url": "https://attack.mitre.org/techniques/T1565/",
+        "description": "Data manipulation techniques"
+      },
+      {
+        "name": "OWASP Input Validation Cheat Sheet",
+        "url": "https://cheatsheetseries.owasp.org/cheatsheets/Input_Validation_Cheat_Sheet.html",
+        "description": "Guidance on preventing tampering via input validation"
+      },
+      {
+        "name": "NIST SP 800-53 Rev 5",
+        "url": "https://csrc.nist.gov/publications/detail/sp/800-53/rev-5/final",
+        "description": "Security Controls for Information Systems and Organizations - SI controls"
+      }
+    ]
+  },
+  "Repudiation": {
+    "description": "Repudiation threats involve users denying actions they performed",
+    "commonAttackVectors": ["Log manipulation", "Timestamp alteration", "Bypassing audit controls"],
+    "securityPrinciples": ["Accountability", "Non-repudiation", "Audit trails"],
+    "officialSources": [
+      {
+        "name": "NIST SP 800-92",
+        "url": "https://csrc.nist.gov/publications/detail/sp/800-92/final",
+        "description": "Guide to Computer Security Log Management"
+      },
+      {
+        "name": "OWASP Logging Cheat Sheet",
+        "url": "https://cheatsheetseries.owasp.org/cheatsheets/Logging_Cheat_Sheet.html",
+        "description": "Guidance on secure logging practices"
+      },
+      {
+        "name": "NIST SP 800-53 Rev 5",
+        "url": "https://csrc.nist.gov/publications/detail/sp/800-53/rev-5/final",
+        "description": "Security Controls for Information Systems and Organizations - AU controls"
+      }
+    ]
+  },
+  "Information Disclosure": {
+    "description": "Information disclosure threats involve unauthorized access to sensitive information",
+    "commonAttackVectors": ["Path traversal", "Insufficient access controls", "Unprotected APIs", "Data exfiltration"],
+    "securityPrinciples": ["Confidentiality", "Need-to-know", "Data minimization"],
+    "officialSources": [
+      {
+        "name": "MITRE ATT&CK",
+        "url": "https://attack.mitre.org/techniques/T1213/",
+        "description": "Data from Information Repositories"
+      },
+      {
+        "name": "OWASP API Security Top 10",
+        "url": "https://owasp.org/API-Security/editions/2023/en/0x00-header/",
+        "description": "Security risks regarding API exposures and data leakage"
+      },
+      {
+        "name": "NIST SP 800-53 Rev 5",
+        "url": "https://csrc.nist.gov/publications/detail/sp/800-53/rev-5/final",
+        "description": "Security Controls for Information Systems and Organizations - SC controls"
+      }
+    ]
+  },
+  "Denial of Service": {
+    "description": "Denial of Service threats involve preventing legitimate users from accessing system resources",
+    "commonAttackVectors": ["Resource exhaustion", "Flooding attacks", "Application logic flaws", "Amplification attacks"],
+    "securityPrinciples": ["Availability", "Resilience", "Redundancy"],
+    "officialSources": [
+      {
+        "name": "MITRE ATT&CK",
+        "url": "https://attack.mitre.org/techniques/T1498/",
+        "description": "Network Denial of Service techniques"
+      },
+      {
+        "name": "OWASP DoS Prevention Cheat Sheet",
+        "url": "https://cheatsheetseries.owasp.org/cheatsheets/Denial_of_Service_Cheat_Sheet.html",
+        "description": "DoS attack prevention strategies"
+      },
+      {
+        "name": "NIST SP 800-61 Rev 2",
+        "url": "https://csrc.nist.gov/publications/detail/sp/800-61/rev-2/final",
+        "description": "Computer Security Incident Handling Guide - DoS handling"
+      }
+    ]
+  },
+  "Elevation of Privilege": {
+    "description": "Elevation of Privilege threats involve unauthorized acquisition of higher privilege levels",
+    "commonAttackVectors": ["Vertical privilege escalation", "Horizontal privilege escalation", "Authorization bypasses"],
+    "securityPrinciples": ["Least privilege", "Defense in depth", "Authorization"],
+    "officialSources": [
+      {
+        "name": "MITRE ATT&CK",
+        "url": "https://attack.mitre.org/techniques/T1548/",
+        "description": "Abuse Elevation Control Mechanism techniques"
+      },
+      {
+        "name": "OWASP Access Control Cheat Sheet",
+        "url": "https://cheatsheetseries.owasp.org/cheatsheets/Access_Control_Cheat_Sheet.html",
+        "description": "Access control best practices"
+      },
+      {
+        "name": "NIST SP 800-53 Rev 5",
+        "url": "https://csrc.nist.gov/publications/detail/sp/800-53/rev-5/final",
+        "description": "Security Controls for Information Systems and Organizations - AC controls"
+      }
+    ]
+  },
+  "default": {
+    "description": "Generic security threat requiring analysis",
+    "commonAttackVectors": ["To be determined based on specific vulnerability"],
+    "securityPrinciples": ["Defense in depth", "Least privilege", "Zero trust"],
+    "officialSources": [
+      {
+        "name": "OWASP Top 10",
+        "url": "https://owasp.org/Top10/",
+        "description": "Top 10 Web Application Security Risks"
+      },
+      {
+        "name": "MITRE CWE Top 25",
+        "url": "https://cwe.mitre.org/top25/",
+        "description": "Most Dangerous Software Weaknesses"
+      },
+      {
+        "name": "NIST Cybersecurity Framework",
+        "url": "https://www.nist.gov/cyberframework",
+        "description": "Framework for improving critical infrastructure cybersecurity"
+      }
+    ]
+  }
+}

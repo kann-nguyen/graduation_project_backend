@@ -1,0 +1,99 @@
+{
+  "Spoofing": {
+    "title": "Authentication Best Practices",
+    "practices": [
+      "Implement multi-factor authentication",
+      "Use strong password policies",
+      "Implement account lockout mechanisms",
+      "Use secure session management",
+      "Implement secure credential storage"
+    ],
+    "standards": [
+      "NIST SP 800-63B Digital Identity Guidelines",
+      "OWASP Authentication Cheat Sheet"
+    ]
+  },
+  "Tampering": {
+    "title": "Data Integrity Best Practices",
+    "practices": [
+      "Validate all input data",
+      "Use prepared statements for database queries",
+      "Implement integrity checks (checksums, hashing)",
+      "Apply proper access controls",
+      "Use secure headers like Content-Security-Policy"
+    ],
+    "standards": [
+      "OWASP Input Validation Cheat Sheet",
+      "OWASP SQL Injection Prevention Cheat Sheet"
+    ]
+  },
+  "Repudiation": {
+    "title": "Logging and Auditing Best Practices",
+    "practices": [
+      "Implement comprehensive logging",
+      "Use tamper-evident logs",
+      "Include essential information in logs (who, what, when, where)",
+      "Implement secure log storage",
+      "Ensure logs meet compliance requirements"
+    ],
+    "standards": [
+      "OWASP Logging Cheat Sheet",
+      "NIST SP 800-92 Guide to Computer Security Log Management"
+    ]
+  },
+  "Information Disclosure": {
+    "title": "Data Protection Best Practices",
+    "practices": [
+      "Encrypt sensitive data at rest and in transit",
+      "Apply proper access controls",
+      "Implement data classification",
+      "Follow data minimization principles",
+      "Secure error handling and configuration"
+    ],
+    "standards": [
+      "OWASP Cryptographic Storage Cheat Sheet",
+      "NIST SP 800-175B Guideline for Using Cryptographic Standards"
+    ]
+  },
+  "Denial of Service": {
+    "title": "Availability Protection Best Practices",
+    "practices": [
+      "Implement rate limiting",
+      "Use client and server-side caching",
+      "Configure timeouts properly",
+      "Implement graceful degradation",
+      "Deploy to multiple regions/zones"
+    ],
+    "standards": [
+      "NIST SP 800-61r2 Computer Security Incident Handling Guide",
+      "OWASP DoS Cheat Sheet"
+    ]
+  },
+  "Elevation of Privilege": {
+    "title": "Access Control Best Practices",
+    "practices": [
+      "Implement principle of least privilege",
+      "Use role-based access control",
+      "Validate authorization on every request",
+      "Implement proper session management",
+      "Use secure configuration"
+    ],
+    "standards": [
+      "OWASP Access Control Cheat Sheet",
+      "NIST SP 800-53 Security and Privacy Controls"
+    ]
+  },
+  "default": {
+    "title": "Security Best Practices",
+    "practices": [
+      "Follow secure coding practices",
+      "Conduct regular security testing",
+      "Maintain updated dependencies",
+      "Implement defense in depth"
+    ],
+    "standards": [
+      "OWASP Top 10",
+      "SANS CWE Top 25"
+    ]
+  }
+}
