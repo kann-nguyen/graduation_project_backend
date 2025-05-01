@@ -60,14 +60,19 @@ interface ScoreComponents {
 }
 
 // Store loaded JSON data
-let threatMitigationsData: Record<string, MitigationStrategy[]>;
 let bestPracticesData: Record<string, BestPractice>;
 let implementationExamplesData: Record<string, ImplementationExample[]>;
-let securityToolsData: { common: SecurityTool[], [key: string]: SecurityTool[] };
 let cweMitigationsData: Record<string, CweMitigation>;
 let severityActionsData: Record<string, SeverityAction>;
 let cvssVectorMappingData: Record<string, any>;
 let securityInfoLinksData: Record<string, Record<string, string>>;
+
+// Separate mitigation data components
+let vulnerabilityCategoriesData: Record<string, MitigationStrategy>;
+let strideCategoriesData: Record<string, MitigationStrategy>;
+let complementaryMitigationsData: Record<string, MitigationStrategy>;
+let cweMappingData: Record<string, string>;
+let patternMatchingData: Record<string, string[]>;
 
 /**
  * Load all JSON configuration files at startup
@@ -77,20 +82,12 @@ async function loadJsonConfigs() {
     // Define paths
     const basePath = path.resolve(__dirname, '../utils');
     
-    threatMitigationsData = JSON.parse(
-      await fs.readFile(path.join(basePath, 'threatMitigations.json'), 'utf8')
-    );
-    
     bestPracticesData = JSON.parse(
       await fs.readFile(path.join(basePath, 'threatBestPractices.json'), 'utf8')
     );
     
     implementationExamplesData = JSON.parse(
       await fs.readFile(path.join(basePath, 'implementationExamples.json'), 'utf8')
-    );
-    
-    securityToolsData = JSON.parse(
-      await fs.readFile(path.join(basePath, 'securityTools.json'), 'utf8')
     );
     
     cweMitigationsData = JSON.parse(
@@ -101,7 +98,7 @@ async function loadJsonConfigs() {
       await fs.readFile(path.join(basePath, 'severityActions.json'), 'utf8')
     );
     
-    // Load the new CVSS vector mapping file
+    // Load the CVSS vector mapping file
     cvssVectorMappingData = JSON.parse(
       await fs.readFile(path.join(basePath, 'cvssVectorMapping.json'), 'utf8')
     );
@@ -109,6 +106,27 @@ async function loadJsonConfigs() {
     // Load the security info links file
     securityInfoLinksData = JSON.parse(
       await fs.readFile(path.join(basePath, 'securityInfoLinks.json'), 'utf8')
+    );
+    
+    // Load the separated mitigation files
+    vulnerabilityCategoriesData = JSON.parse(
+      await fs.readFile(path.join(basePath, 'vulnerabilityCategories.json'), 'utf8')
+    );
+    
+    strideCategoriesData = JSON.parse(
+      await fs.readFile(path.join(basePath, 'strideCategories.json'), 'utf8')
+    );
+    
+    complementaryMitigationsData = JSON.parse(
+      await fs.readFile(path.join(basePath, 'complementaryMitigations.json'), 'utf8')
+    );
+    
+    cweMappingData = JSON.parse(
+      await fs.readFile(path.join(basePath, 'cweMapping.json'), 'utf8')
+    );
+    
+    patternMatchingData = JSON.parse(
+      await fs.readFile(path.join(basePath, 'patternMatching.json'), 'utf8')
     );
     
     console.log("✅ All threat modeling data files loaded successfully");
@@ -327,135 +345,6 @@ export function calculateScoresFromVulnerability(vulnerability: any) {
 }
 
 /**
- * Get mitigation suggestions for "Suggest Fix" button
- * 
- * This endpoint provides actionable recommendations for fixing a threat:
- * - General and specific mitigation strategies
- * - Security best practices
- * - Implementation examples with code snippets
- * - Recommended security tools
- * 
- * @param {Request} req - Request from client containing threatId
- * @param {Response} res - Response with suggested fixes and mitigations
- * @returns {Promise<Response>} - JSON response
- */
-export async function getSuggestedFixes(req: Request, res: Response) {
-  const { id } = req.params;
-  
-  try {
-    // Get the threat and related vulnerability data
-    const threat = await ThreatModel.findById(id);
-    
-    if (!threat) {
-      return res.json(errorResponse("Threat not found"));
-    }
-    
-    // Find any artifact containing this threat to get the vulnerability data
-    const artifact = await ArtifactModel.findOne({
-      threatList: id,
-    });
-    
-    // Find the corresponding vulnerability based on threat.name (which is the CVE ID)
-    const relatedVulnerability = artifact?.vulnerabilityList?.find(
-      (vuln) => vuln.cveId === threat.name
-    );
-    
-    // If vulnerability exists but threat score is zero, update the threat score
-    if (relatedVulnerability && 
-       (threat.score.total === 0 || 
-        (threat.score.details.damage === 0 && 
-        threat.score.details.reproducibility === 0 && 
-        threat.score.details.exploitability === 0 && 
-        threat.score.details.affectedUsers === 0 && 
-        threat.score.details.discoverability === 0))) {
-      
-      // Calculate scores based on vulnerability data
-      const scores = calculateScoresFromVulnerability(relatedVulnerability);
-      
-      // Update the threat with the calculated scores
-      await ThreatModel.findByIdAndUpdate(id, {
-        $set: {
-          'score.total': scores.total,
-          'score.details': {
-            damage: scores.details.damage,
-            reproducibility: scores.details.reproducibility,
-            exploitability: scores.details.exploitability,
-            affectedUsers: scores.details.affectedUsers,
-            discoverability: scores.details.discoverability
-          }
-        }
-      });
-    }
-    
-    // Get mitigation suggestions based on threat type
-    const mitigationSuggestions = getMitigationSuggestions(
-      threat.type,
-      relatedVulnerability
-    );
-    
-    // Add best practices for the specific threat type
-    const bestPractices = getBestPracticesForThreatType(threat.type);
-    
-    // Implementation examples and code snippets
-    const implementationExamples = getImplementationExamples(threat.type, relatedVulnerability);
-    
-    // Get recommended security tools
-    const recommendedTools = getRecommendedTools(threat.type);
-    
-    return res.json(
-      successResponse(
-        {
-          threat,
-          mitigationSuggestions,
-          bestPractices,
-          implementationExamples,
-          recommendedTools,
-        },
-        "Mitigation suggestions retrieved successfully"
-      )
-    );
-  } catch (error) {
-    console.error("Error retrieving mitigation suggestions:", error);
-    return res.json(errorResponse(`Internal server error: ${error}`));
-  }
-}
-
-
-
-/**
- * Get mitigation suggestions based on CWE IDs
- * 
- * @param {string[]} cwes - Array of CWE IDs from vulnerability
- * @returns {Array} - Array of mitigation suggestions
- */
-function getCweMitigations(cwes: string[]) {
-  const mitigations = [];
-  
-  // Add mitigations for each matched CWE
-  for (const cwe of cwes) {
-    const cweNumber = cwe.replace("CWE-", "");
-    const key = `CWE-${cweNumber}`;
-    
-    if (cweMitigationsData[key]) {
-      mitigations.push(cweMitigationsData[key]);
-    }
-  }
-  
-  return mitigations;
-}
-
-/**
- * Get severity-based action recommendations
- * 
- * @param {string} severity - Severity level of the vulnerability
- * @returns {Object|null} - Severity-specific action recommendation
- */
-function getSeverityActions(severity: string) {
-  const severityUpper = severity.toUpperCase();
-  return severityActionsData[severityUpper] || severityActionsData['default'];
-}
-
-/**
  * Get enhanced threat context with official links for the informational elements
  * 
  * @param {string} threatType - The STRIDE category of the threat
@@ -661,40 +550,506 @@ function getPotentialImpacts(threatType: string): string[] {
   return impactsByThreatType[threatType] || ["Multiple security impacts"];
 }
 
+/**
+ * Get mitigation suggestions for "Suggest Fix" button
+ * 
+ * This endpoint provides actionable recommendations for fixing a threat:
+ * - General and specific mitigation strategies
+ * - Security best practices
+ * - Implementation examples with code snippets
+ * - Recommended security tools
+ * 
+ * @param {Request} req - Request from client containing threatId
+ * @param {Response} res - Response with suggested fixes and mitigations
+ * @returns {Promise<Response>} - JSON response
+ */
+export async function getSuggestedFixes(req: Request, res: Response) {
+  const { id } = req.params;
+  
+  try {
+    // Get the threat and related vulnerability data
+    const threat = await ThreatModel.findById(id);
+    
+    if (!threat) {
+      return res.json(errorResponse("Threat not found"));
+    }
+    
+    // Find any artifact containing this threat to get the vulnerability data
+    const artifact = await ArtifactModel.findOne({
+      threatList: id,
+    });
+    
+    // Find the corresponding vulnerability based on threat.name (which is the CVE ID)
+    const relatedVulnerability = artifact?.vulnerabilityList?.find(
+      (vuln) => vuln.cveId === threat.name
+    );
+    
+    // If vulnerability exists but threat score is zero, update the threat score
+    if (relatedVulnerability && 
+       (threat.score.total === 0 || 
+        (threat.score.details.damage === 0 && 
+        threat.score.details.reproducibility === 0 && 
+        threat.score.details.exploitability === 0 && 
+        threat.score.details.affectedUsers === 0 && 
+        threat.score.details.discoverability === 0))) {
+      
+      // Calculate scores based on vulnerability data
+      const scores = calculateScoresFromVulnerability(relatedVulnerability);
+      
+      // Update the threat with the calculated scores
+      await ThreatModel.findByIdAndUpdate(id, {
+        $set: {
+          'score.total': scores.total,
+          'score.details': {
+            damage: scores.details.damage,
+            reproducibility: scores.details.reproducibility,
+            exploitability: scores.details.exploitability,
+            affectedUsers: scores.details.affectedUsers,
+            discoverability: scores.details.discoverability
+          }
+        }
+      });
+    }
+    
+    // Get mitigation suggestions based on threat type
+    const mitigationSuggestions = getMitigationSuggestions(
+      threat.type,
+      relatedVulnerability
+    );
+    
+    // Get best practices that are specific to the mitigation suggestions
+    const bestPractices = getSpecificBestPractices(
+      threat.type, 
+      mitigationSuggestions, 
+      relatedVulnerability
+    );
+    
+    // Get implementation examples specific to the mitigation suggestions
+    // const implementationExamples = getSpecificImplementationExamples(
+    //   threat.type, 
+    //   mitigationSuggestions, 
+    //   relatedVulnerability
+    // );
+    
+    return res.json(
+      successResponse(
+        {
+          threat,
+          mitigationSuggestions,
+          bestPractices,
+          //implementationExamples,
+        },
+        "Mitigation suggestions retrieved successfully"
+      )
+    );
+  } catch (error) {
+    console.error("Error retrieving mitigation suggestions:", error);
+    return res.json(errorResponse(`Internal server error: ${error}`));
+  }
+}
 
 /**
  * Get mitigation suggestions based on threat type and vulnerability data
  * 
  * @param {string} threatType - The STRIDE category of the threat
  * @param {any} vulnerability - Related vulnerability data if available
- * @returns {Object} - Object containing general and specific mitigations
+ * @returns {Object} - Object containing specific mitigations
  */
 function getMitigationSuggestions(threatType: string, vulnerability: any) {
-  // Get general mitigations based on threat type from loaded JSON
-  const baseMitigations = threatMitigationsData[threatType] || threatMitigationsData['default'];
+  // Collect all information to inform our mitigation strategy
+  const cwes = vulnerability?.cwes || [];
+  const cvssVector = vulnerability?.cvssVector || "";
+  const description = vulnerability?.description || "";
+  const severity = vulnerability?.severity || "";
   
-  const specifics = [];
+  // Create a comprehensive context analysis from all available information
+  const context = analyzeVulnerabilityContext(threatType, cwes, cvssVector, description, severity);
   
-  // Add vulnerability-specific mitigations if available
-  if (vulnerability) {
-    // Check for CWEs to provide more targeted suggestions
-    if (vulnerability.cwes && vulnerability.cwes.length > 0) {
-      const cweMitigations = getCweMitigations(vulnerability.cwes);
-      specifics.push(...cweMitigations);
-    }
+  // Generate 1-2 focused mitigations based on the comprehensive analysis
+  const mitigations = [];
+  
+  // 1. Generate primary mitigation based on context
+  const primaryMitigation = generatePrimaryMitigation(context);
+  if (primaryMitigation) {
+    mitigations.push(primaryMitigation);
+  }
+  
+  // 2. Optionally generate a complementary mitigation if relevant
+  const secondaryMitigation = generateComplementaryMitigation(context, primaryMitigation?.title || "");
+  if (secondaryMitigation) {
+    mitigations.push(secondaryMitigation);
+  }
+  
+  // Return the focused mitigations
+  return {
+    specific: mitigations
+  };
+}
+
+/**
+ * Analyze vulnerability to create a comprehensive context for mitigation generation
+ * 
+ * @param {string} threatType - STRIDE category
+ * @param {string[]} cwes - CWE identifiers
+ * @param {string} cvssVector - CVSS vector string
+ * @param {string} description - Vulnerability description
+ * @param {string} severity - Vulnerability severity
+ * @returns {Object} - Comprehensive context analysis
+ */
+function analyzeVulnerabilityContext(
+  threatType: string,
+  cwes: string[],
+  cvssVector: string,
+  description: string,
+  severity: string
+): any {
+  // Identify key vulnerability characteristics
+  const descriptionLower = description.toLowerCase();
+  
+  // 1. Attack vector characteristics
+  const isNetworkBased = cvssVector.includes('AV:N');
+  const isLocalAttack = cvssVector.includes('AV:L');
+  const isAdjacentAttack = cvssVector.includes('AV:A');
+  const isPhysicalAttack = cvssVector.includes('AV:P');
+  
+  // 2. Attack complexity
+  const isLowComplexity = cvssVector.includes('AC:L');
+  const isHighComplexity = cvssVector.includes('AC:H');
+  
+  // 3. Authentication/privileges required
+  const noPrivRequired = cvssVector.includes('PR:N');
+  const lowPrivRequired = cvssVector.includes('PR:L');
+  const highPrivRequired = cvssVector.includes('PR:H');
+  
+  // 4. User interaction
+  const userInteractionRequired = cvssVector.includes('UI:R');
+  const noUserInteraction = cvssVector.includes('UI:N');
+  
+  // 5. Impact characteristics
+  const highConfidentiality = cvssVector.includes('C:H');
+  const highIntegrity = cvssVector.includes('I:H');
+  const highAvailability = cvssVector.includes('A:H');
+  const scopeChanged = cvssVector.includes('S:C');
+  
+  // 6. Map CWEs to vulnerability categories
+  const vulnCategories = new Set<string>();
+  
+  // Check if mitigationTemplatesData is loaded
+  if (vulnerabilityCategoriesData && cweMappingData && patternMatchingData) {
+    // Map known CWEs to vulnerability categories using our mapping
+    cwes.forEach(cwe => {
+      const cweNum = cwe.replace('CWE-', '');
+      if (cweMappingData[cweNum]) {
+        vulnCategories.add(cweMappingData[cweNum]);
+      }
+    });
     
-    // Add severity-based recommendations
-    if (vulnerability.severity) {
-      const severityAction = getSeverityActions(vulnerability.severity);
-      if (severityAction) {
-        specifics.push(severityAction);
+    // 7. Analyze description for additional context using patterns from JSON
+    if (description) {
+      for (const [category, patterns] of Object.entries(patternMatchingData)) {
+        // Check if any pattern appears in the description
+        const hasPattern = (patterns as string[]).some(pattern => 
+          descriptionLower.includes(pattern.toLowerCase())
+        );
+        
+        if (hasPattern) {
+          vulnCategories.add(category);
+        }
       }
     }
   }
   
+  // 8. Determine the primary vulnerability category based on combined analysis
+  let primaryVulnCategory = '';
+  
+  // Use the most specific vulnerability category we've identified
+  if (vulnCategories.size > 0) {
+    // Some categories are more critical than others
+    const categoryPriority = [
+      'sql-injection', 'command-injection', 'xss', 'xxe', 'deserialization', 
+      'path-traversal', 'ssrf', 'csrf', 'authentication', 'authorization',
+      'crypto', 'info-exposure', 'resource-management', 'misconfiguration'
+    ];
+    
+    for (const category of categoryPriority) {
+      if (vulnCategories.has(category)) {
+        primaryVulnCategory = category;
+        break;
+      }
+    }
+  }
+  
+  // 9. Analyze threat-specific factors
+  const isAuthenticationIssue = threatType === 'Spoofing' || vulnCategories.has('authentication');
+  const isAuthorizationIssue = threatType === 'Elevation of Privilege' || vulnCategories.has('authorization');
+  const isDataIntegrityIssue = threatType === 'Tampering' || highIntegrity;
+  const isConfidentialityIssue = threatType === 'Information Disclosure' || highConfidentiality;
+  const isAvailabilityIssue = threatType === 'Denial of Service' || highAvailability;
+  const isAuditingIssue = threatType === 'Repudiation';
+  
+  // 10. Determine criticality
+  const isCritical = 
+    (isNetworkBased && isLowComplexity && noPrivRequired) || // Easily exploitable remotely
+    severity.toUpperCase() === 'CRITICAL' || 
+    (highConfidentiality && highIntegrity && highAvailability); // High impact across CIA triad
+  
+  // Return comprehensive context
   return {
-    general: baseMitigations,
-    specific: specifics,
+    threatType,
+    cwes,
+    primaryVulnCategory,
+    vulnCategories: Array.from(vulnCategories),
+    isNetworkBased,
+    isLocalAttack,
+    isLowComplexity, 
+    noPrivRequired,
+    userInteractionRequired,
+    highConfidentiality,
+    highIntegrity,
+    highAvailability,
+    scopeChanged,
+    severity,
+    isAuthenticationIssue,
+    isAuthorizationIssue,
+    isDataIntegrityIssue,
+    isConfidentialityIssue,
+    isAvailabilityIssue,
+    isAuditingIssue,
+    isCritical,
+    description
+  };
+}
+
+/**
+ * Generate the primary mitigation strategy based on comprehensive context
+ * 
+ * @param {Object} context - Comprehensive vulnerability context
+ * @returns {MitigationStrategy|null} - Primary mitigation strategy or null
+ */
+function generatePrimaryMitigation(context: any): MitigationStrategy | null {
+  // Check if we have mitigation templates loaded
+  if (!vulnerabilityCategoriesData) {
+    console.error("Mitigation templates not loaded");
+    return null;
+  }
+  
+  // 1. Try to find a specific vulnerability category mitigation
+  if (context.primaryVulnCategory && 
+      vulnerabilityCategoriesData[context.primaryVulnCategory]) {
+    
+    // Get the mitigation strategy from our templates
+    const mitigation = vulnerabilityCategoriesData[context.primaryVulnCategory];
+    
+    // Add context-specific modifications
+    let description = mitigation.description;
+    if (context.isCritical) {
+      description = `Critical: ${description}`;
+    }
+    
+    // Add context-specific implementation details if needed
+    let implementation = mitigation.implementation;
+    if (context.isNetworkBased && context.primaryVulnCategory === 'authentication') {
+      implementation = `Implement multi-factor authentication. ${implementation}`;
+    }
+    
+    return {
+      title: mitigation.title,
+      description: description,
+      implementation: implementation,
+      securityControls: mitigation.securityControls
+    };
+  }
+  
+  // 2. If no specific vulnerability category was identified, try using CWE-specific mitigations
+  if (context.cwes.length > 0) {
+    for (const cwe of context.cwes) {
+      const cweNumber = cwe.replace("CWE-", "");
+      
+      // Check if we have this CWE mapped to a vulnerability category
+      if (cweMappingData[cweNumber]) {
+        const vulnCategory = cweMappingData[cweNumber];
+        const mitigation = vulnerabilityCategoriesData[vulnCategory];
+        
+        if (mitigation) {
+          // Add context-specific details
+          let implementation = mitigation.implementation;
+          
+          if (context.isNetworkBased) {
+            implementation += " Since this is remotely exploitable, implement network-level protections as well.";
+          }
+          
+          // Add threat-specific context
+          if (context.isAuthenticationIssue) {
+            implementation += " Verify identity thoroughly and implement strong authentication.";
+          } else if (context.isAuthorizationIssue) {
+            implementation += " Verify authorization for all sensitive operations.";
+          } else if (context.isDataIntegrityIssue) {
+            implementation += " Validate data integrity and implement cryptographic controls.";
+          } else if (context.isConfidentialityIssue) {
+            implementation += " Ensure sensitive data is properly classified and encrypted.";
+          } else if (context.isAvailabilityIssue) {
+            implementation += " Implement proper resource constraints and error handling.";
+          } else if (context.isAuditingIssue) {
+            implementation += " Ensure actions are properly logged and auditable.";
+          }
+          
+          return {
+            title: mitigation.title,
+            description: `${context.isCritical ? 'Critical: ' : ''}${mitigation.description}`,
+            implementation: implementation,
+            securityControls: mitigation.securityControls
+          };
+        }
+      }
+      
+      // Fallback to using the CWE-specific mitigations from the cweMitigations.json file
+      const key = `CWE-${cweNumber}`;
+      const cweMitigation = cweMitigationsData[key];
+      
+      if (cweMitigation) {
+        // Create a more detailed implementation based on threat type and context
+        let implementation = cweMitigation.implementation;
+        
+        // Add context-specific details
+        if (context.isNetworkBased) {
+          implementation += " Since this is remotely exploitable, implement network-level protections as well.";
+        }
+        
+        // Add threat-specific context
+        if (context.isAuthenticationIssue) {
+          implementation += " Verify identity thoroughly and implement strong authentication.";
+        } else if (context.isAuthorizationIssue) {
+          implementation += " Verify authorization for all sensitive operations.";
+        } else if (context.isDataIntegrityIssue) {
+          implementation += " Validate data integrity and implement cryptographic controls.";
+        } else if (context.isConfidentialityIssue) {
+          implementation += " Ensure sensitive data is properly classified and encrypted.";
+        } else if (context.isAvailabilityIssue) {
+          implementation += " Implement proper resource constraints and error handling.";
+        } else if (context.isAuditingIssue) {
+          implementation += " Ensure actions are properly logged and auditable.";
+        }
+        
+        return {
+          title: cweMitigation.title,
+          description: `${context.isCritical ? 'Critical: ' : ''}${cweMitigation.description}`,
+          implementation: implementation,
+          securityControls: [
+            "CWE-Specific Controls", 
+            context.isNetworkBased ? "Network Security" : "Local Security",
+            context.isLowComplexity ? "Defense in Depth" : "Targeted Protection",
+            "Secure Coding"
+          ]
+        };
+      }
+    }
+  }
+  
+  // 3. Try to determine from description patterns
+  if (context.description) {
+    const descLower = context.description.toLowerCase();
+    
+    for (const [category, patterns] of Object.entries(patternMatchingData)) {
+      // Check if any pattern appears in the description
+      const hasPattern = (patterns as string[]).some(pattern => 
+        descLower.includes(pattern.toLowerCase())
+      );
+      
+      if (hasPattern && vulnerabilityCategoriesData[category]) {
+        const mitigation = vulnerabilityCategoriesData[category];
+        
+        return {
+          title: mitigation.title,
+          description: `${context.isCritical ? 'Critical: ' : ''}${mitigation.description}`,
+          implementation: mitigation.implementation,
+          securityControls: mitigation.securityControls
+        };
+      }
+    }
+  }
+  
+  // 4. Fall back to STRIDE-based general mitigation if nothing more specific was found
+  return getGeneralMitigation(context.threatType);
+}
+
+/**
+ * Generate a complementary mitigation that addresses a different aspect
+ * 
+ * @param {Object} context - Comprehensive vulnerability context
+ * @param {string} primaryTitle - Title of the primary mitigation to avoid duplication
+ * @returns {MitigationStrategy|null} - Complementary mitigation or null
+ */
+function generateComplementaryMitigation(context: any, primaryTitle: string): MitigationStrategy | null {
+  // Check if we have mitigation templates loaded
+  if (!complementaryMitigationsData) {
+    console.error("Mitigation templates not loaded");
+    return null;
+  }
+  
+  const descLower = context.description.toLowerCase();
+  
+  // Based on combined context, identify different aspects that should be addressed
+  
+  // If primary focused on prevention, add detection/monitoring
+  if (!primaryTitle.includes("Monitor") && !primaryTitle.includes("Detect") && context.isNetworkBased) {
+    return complementaryMitigationsData.securityMonitoring;
+  }
+  
+  // If dealing with authentication but primary didn't address password issues specifically
+  if (context.isAuthenticationIssue && !primaryTitle.includes("Password") && 
+     (descLower.includes("password") || descLower.includes("credential"))) {
+    return complementaryMitigationsData.passwordSecurity;
+  }
+  
+  // If dealing with sensitive data but primary didn't address minimization
+  if (context.isConfidentialityIssue && !primaryTitle.includes("Minimization") && 
+     (descLower.includes("sensitive") || descLower.includes("personal") || descLower.includes("private"))) {
+    return complementaryMitigationsData.dataMinimization;
+  }
+  
+  // If dealing with APIs but primary didn't address API security specifically
+  if (!primaryTitle.includes("API") && 
+     (descLower.includes("api") || descLower.includes("endpoint") || descLower.includes("interface"))) {
+    return complementaryMitigationsData.apiSecurity;
+  }
+  
+  // If dealing with DoS and memory issues but primary didn't address memory specifically
+  if (context.isAvailabilityIssue && !primaryTitle.includes("Memory") && descLower.includes("memory")) {
+    return complementaryMitigationsData.memoryProtection;
+  }
+  
+  // Add redundancy for critical availability issues
+  if (context.isAvailabilityIssue && context.isCritical && !primaryTitle.includes("Redundancy")) {
+    return complementaryMitigationsData.systemRedundancy;
+  }
+  
+  // If we didn't find a specific complementary mitigation, return null
+  return null;
+}
+
+/**
+ * Get a general mitigation based on STRIDE category
+ * 
+ * @param {string} threatType - STRIDE category
+ * @returns {MitigationStrategy} - General STRIDE-based mitigation
+ */
+function getGeneralMitigation(threatType: string): MitigationStrategy {
+  // Check if we have mitigation templates loaded
+  if (!strideCategoriesData) {
+    console.error("Mitigation templates or STRIDE categories not loaded");
+    return {
+      title: "Implement Security Controls",
+      description: "Address security vulnerability",
+      implementation: "Implement proper input validation and output encoding. Apply security controls according to the vulnerability type. Follow security best practices for your specific technology stack.",
+      securityControls: ["Input Validation", "Output Encoding", "Security Best Practices"]
+    };
+  }
+  
+  return strideCategoriesData[threatType] || {
+    title: "Implement Security Controls",
+    description: "Address security vulnerability",
+    implementation: "Implement proper input validation and output encoding. Apply security controls according to the vulnerability type. Follow security best practices for your specific technology stack.",
+    securityControls: ["Input Validation", "Output Encoding", "Security Best Practices"]
   };
 }
 
@@ -706,6 +1061,126 @@ function getMitigationSuggestions(threatType: string, vulnerability: any) {
  */
 function getBestPracticesForThreatType(threatType: string): any {
   return bestPracticesData[threatType] || bestPracticesData['default'];
+}
+
+/**
+ * Get specific best practices for the identified mitigations
+ * 
+ * @param {string} threatType - The STRIDE category of the threat
+ * @param {any} mitigationSuggestions - The suggested mitigations 
+ * @param {any} vulnerability - Related vulnerability data if available
+ * @returns {Object} - Best practices tailored to the specific mitigations
+ */
+function getSpecificBestPractices(threatType: string, mitigationSuggestions: any, vulnerability: any = null): any {
+  // Get base best practices from the threat type
+  const baseBestPractices = getBestPracticesForThreatType(threatType);
+  
+  // Create a new object for the specific best practices
+  const specificBestPractices = {
+    title: baseBestPractices.title,
+    practices: [...baseBestPractices.practices],
+    standards: [...baseBestPractices.standards]
+  };
+  
+  // If we have mitigation suggestions, refine the best practices
+  if (mitigationSuggestions && mitigationSuggestions.specific && mitigationSuggestions.specific.length > 0) {
+    // Extract keywords from mitigation titles and implementations
+    const mitigationKeywords: string[] = [];
+    
+    mitigationSuggestions.specific.forEach((mitigation: MitigationStrategy) => {
+      // Extract keywords from the mitigation title and implementation
+      const titleWords = mitigation.title.toLowerCase().split(/\s+/);
+      const implementationWords = mitigation.implementation.toLowerCase().split(/\s+/);
+      
+      // Add significant keywords (filtering out common words)
+      const commonWords = ['the', 'a', 'an', 'and', 'or', 'for', 'to', 'in', 'on', 'with', 'by', 'of'];
+      
+      titleWords.forEach(word => {
+        if (word.length > 3 && !commonWords.includes(word) && !mitigationKeywords.includes(word)) {
+          mitigationKeywords.push(word);
+        }
+      });
+      
+      implementationWords.forEach(word => {
+        if (word.length > 3 && !commonWords.includes(word) && !mitigationKeywords.includes(word)) {
+          mitigationKeywords.push(word);
+        }
+      });
+      
+      // If security controls are provided, add them as keywords
+      if (mitigation.securityControls) {
+        mitigation.securityControls.forEach((control: string) => {
+          const controlWords = control.toLowerCase().split(/\s+/);
+          controlWords.forEach(word => {
+            if (word.length > 3 && !commonWords.includes(word) && !mitigationKeywords.includes(word)) {
+              mitigationKeywords.push(word);
+            }
+          });
+        });
+      }
+    });
+    
+    // If we have vulnerability-specific data, add more context
+    if (vulnerability && vulnerability.cwes) {
+      // Look for specific CWEs and add relevant best practices
+      const cwes = vulnerability.cwes || [];
+      
+      // Add CWE-specific best practices if they exist in our data
+      cwes.forEach((cwe: string) => {
+        const cweNumber = cwe.replace('CWE-', '');
+        
+        // If we have specific best practices for this CWE in our data, add them
+        if (bestPracticesData[`cwe-${cweNumber}`]) {
+          const cweBestPractices = bestPracticesData[`cwe-${cweNumber}`];
+          specificBestPractices.practices = [
+            ...specificBestPractices.practices,
+            ...cweBestPractices.practices.filter((practice: string) => 
+              !specificBestPractices.practices.includes(practice)
+            )
+          ];
+          
+          specificBestPractices.standards = [
+            ...specificBestPractices.standards,
+            ...cweBestPractices.standards.filter((standard: string) => 
+              !specificBestPractices.standards.includes(standard)
+            )
+          ];
+        }
+      });
+    }
+    
+    // Prioritize practices based on keywords
+    if (mitigationKeywords.length > 0) {
+      // Sort practices by relevance to the keywords
+      specificBestPractices.practices.sort((a: string, b: string) => {
+        const aRelevance = mitigationKeywords.reduce((score: number, keyword: string) => {
+          return score + (a.toLowerCase().includes(keyword) ? 1 : 0);
+        }, 0);
+        
+        const bRelevance = mitigationKeywords.reduce((score: number, keyword: string) => {
+          return score + (b.toLowerCase().includes(keyword) ? 1 : 0);
+        }, 0);
+        
+        return bRelevance - aRelevance;
+      });
+      
+      // Limit to most relevant practices
+      specificBestPractices.practices = specificBestPractices.practices.slice(0, 8);
+    }
+  }
+  
+  // Add primary STRIDE category best practice if not already included
+  const stridePractice = `Apply ${threatType} countermeasures in your security architecture.`;
+  if (!specificBestPractices.practices.includes(stridePractice)) {
+    specificBestPractices.practices.unshift(stridePractice);
+  }
+  
+  // Add relevant security standards if dealing with specific vulnerabilities
+  if (vulnerability && vulnerability.severity === 'critical') {
+    specificBestPractices.standards.unshift("OWASP ASVS Level 3 (Critical Applications)");
+  }
+  
+  return specificBestPractices;
 }
 
 /**
@@ -721,107 +1196,5 @@ function getImplementationExamples(threatType: string, vulnerability: any): any[
   
   let examples = [...baseExamples];
   
-  // Add vulnerability-specific examples if CWEs are available
-  if (vulnerability?.cwes?.length > 0) {
-    const cweExamples = getCweSpecificExamples(vulnerability.cwes);
-    if (cweExamples) {
-      examples.push(cweExamples);
-    }
-  }
-  
   return examples;
-}
-
-/**
- * Get code examples specific to CWEs
- * 
- * @param {string[]} cwes - Array of CWE IDs
- * @returns {Object|null} - Code example specific to the CWE or null
- */
-function getCweSpecificExamples(cwes: string[]): any | null {
-  // Hard-coded examples for specific CWEs
-  // These should be moved to JSON files in a future update
-  
-  if (cwes.includes('CWE-79')) {
-    return {
-      title: "XSS Prevention Example",
-      language: "JavaScript",
-      description: "Preventing Cross-Site Scripting",
-      code: `
-// React example with safe rendering
-import React from 'react';
-import DOMPurify from 'dompurify';
-
-function SafeHtmlComponent({ userProvidedHtml }) {
-  // Sanitize HTML before rendering
-  const sanitizedHtml = DOMPurify.sanitize(userProvidedHtml);
-  
-  return <div dangerouslySetInnerHTML={{ __html: sanitizedHtml }} />;
-}`
-    };
-  }
-  
-  if (cwes.includes('CWE-89')) {
-    return {
-      title: "SQL Injection Prevention",
-      language: "JavaScript",
-      description: "Using parameterized queries to prevent SQL injection",
-      code: `
-// Example with prepared statements in Node.js
-const { Pool } = require('pg');
-const pool = new Pool();
-
-async function getUserById(userId) {
-  try {
-    // Use parameterized query instead of string concatenation
-    const result = await pool.query(
-      'SELECT * FROM users WHERE id = $1', 
-      [userId] // Parameters passed separately
-    );
-    return result.rows[0];
-  } catch (err) {
-    console.error('Database error:', err);
-    throw err;
-  }
-}`
-    };
-  }
-  
-  if (cwes.includes('CWE-78')) {
-    return {
-      title: "Command Injection Prevention",
-      language: "JavaScript",
-      description: "Safely executing system commands",
-      code: `
-// Example of safe command execution
-const { execFile } = require('child_process');
-
-function runSafeCommand(fileName, args) {
-  return new Promise((resolve, reject) => {
-    // Using execFile instead of exec prevents command injection
-    execFile(fileName, args, (error, stdout, stderr) => {
-      if (error) {
-        return reject(error);
-      }
-      resolve({ stdout, stderr });
-    });
-  });
-}`
-    };
-  }
-  
-  return null;
-}
-
-/**
- * Get recommended security tools based on threat type
- * 
- * @param {string} threatType - The STRIDE category of the threat
- * @returns {Array} - Array of recommended security tools
- */
-function getRecommendedTools(threatType: string): any[] {
-  const commonTools = securityToolsData.common || [];
-  const specificTools = securityToolsData[threatType] || [];
-  
-  return [...specificTools, ...commonTools];
 }

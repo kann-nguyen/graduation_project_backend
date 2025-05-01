@@ -1,0 +1,10 @@
+{
+  "sql-injection": ["sql", "inject", "queri"],
+  "xss": ["xss", "cross-site script", "cross site script"],
+  "command-injection": ["command", "shell", "exec", "inject"],
+  "csrf": ["csrf", "cross-site request forgery"],
+  "ssrf": ["ssrf", "server-side request forgery"],
+  "path-traversal": ["traversal", "directory", "path", "file"],
+  "xxe": ["xxe", "xml external"],
+  "deserialization": ["deseriali"]
+}

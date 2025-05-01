@@ -1,0 +1,38 @@
+{
+  "Spoofing": {
+    "title": "Implement Strong Authentication",
+    "description": "Prevent identity spoofing attacks",
+    "implementation": "Implement multi-factor authentication where possible. Use secure session management with proper timeout and cookie security flags. Consider implementing additional verification for sensitive operations.",
+    "securityControls": ["Multi-factor Authentication", "Session Management", "Identity Verification"]
+  },
+  "Tampering": {
+    "title": "Implement Data Integrity Controls",
+    "description": "Prevent unauthorized data modifications",
+    "implementation": "Use cryptographic integrity controls (digital signatures, HMAC). Implement proper access control for all data modification operations. Validate all inputs thoroughly before processing.",
+    "securityControls": ["Cryptographic Controls", "Access Control", "Input Validation"]
+  },
+  "Repudiation": {
+    "title": "Implement Secure Audit Logging",
+    "description": "Ensure all security-relevant actions are properly logged",
+    "implementation": "Log all security-relevant events with sufficient detail. Protect logs from unauthorized access or modification. Consider using digital signatures for critical transactions.",
+    "securityControls": ["Secure Logging", "Log Integrity", "Digital Signatures"]
+  },
+  "Information Disclosure": {
+    "title": "Implement Data Protection Controls",
+    "description": "Prevent unauthorized access to sensitive information",
+    "implementation": "Encrypt sensitive data both at rest and in transit. Implement proper access controls and data classification. Ensure error handling doesn't expose sensitive information.",
+    "securityControls": ["Encryption", "Access Control", "Secure Error Handling"]
+  },
+  "Denial of Service": {
+    "title": "Implement Resource Protection Controls",
+    "description": "Prevent service disruption",
+    "implementation": "Implement rate limiting and request throttling. Design for graceful degradation under load. Consider implementing CDN and DDoS protection services.",
+    "securityControls": ["Rate Limiting", "Scaling", "Resource Management"]
+  },
+  "Elevation of Privilege": {
+    "title": "Implement Authorization Controls",
+    "description": "Prevent unauthorized access to privileged functions",
+    "implementation": "Implement proper authorization checks for all sensitive operations. Apply the principle of least privilege across all components. Validate all access control decisions server-side.",
+    "securityControls": ["Authorization Checks", "Least Privilege", "Access Control"]
+  }
+}

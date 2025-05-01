@@ -194,7 +194,7 @@ const sourceWeights: Record<VotingSource, number> = {
 export async function loadCweMapping(): Promise<Record<string, ThreatType[]>> {
   try {
     // Resolve the path to the JSON file
-    const filePath = path.resolve("src\\utils\\cweToThreat.json");
+    const filePath = path.resolve("src\\utils\\cweToStride.json");
     // Read the file contents as a UTF-8 string
     const data = await fs.readFile(filePath, "utf8");
     // Parse the JSON content into an object
