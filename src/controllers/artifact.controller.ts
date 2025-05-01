@@ -134,23 +134,35 @@ export async function updateRateScan(req: Request, res: Response) {
 function createThreatFromVuln(vuln: any, artifactType: string): Partial<Threat> {
   const votes = getVotes(vuln);
   const threatType = resolveThreatType(votes, artifactType);
-  const baseScore = vuln.score || 0;
+  
+  // Calculate initial scores based on vulnerability data
+  let scoreData;
+  try {
+    // Import the calculation function from threatModeling.controller
+    const { calculateScoresFromVulnerability } = require('./threatModeling.controller');
+    scoreData = calculateScoresFromVulnerability(vuln);
+  } catch (error) {
+    console.error("Error calculating initial threat scores:", error);
+    // Fallback to default scores if the calculation fails
+    scoreData = {
+      total: vuln.score ? vuln.score / 2 : 2.5, // Convert CVSS (0-10) to our scale (0-5)
+      details: {
+        damage: 2.5,
+        reproducibility: 2.5,
+        exploitability: 2.5,
+        affectedUsers: 2.5,
+        discoverability: 2.5,
+      }
+    };
+  }
+  
   return {
     name: vuln.cveId,
     description: vuln.description ?? "Have no des",
     type: threatType ?? "Spoofing",
     mitigation: ["Pending mitigation plan"],
     status: "Non mitigated",
-    score: {
-      total: baseScore,
-      details: {
-        damage: baseScore,
-        reproducibility: baseScore,
-        exploitability: baseScore,
-        affectedUsers: baseScore,
-        discoverability: baseScore,
-      },
-    },
+    score: scoreData,
   };
 }
 

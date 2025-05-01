@@ -3,6 +3,7 @@ import { ThreatModel, ArtifactModel } from "../models/models";
 import { errorResponse, successResponse } from "../utils/responseFormat";
 import * as fs from 'fs/promises';
 import * as path from 'path';
+import { string } from "zod";
 
 // Interfaces to type our JSON data
 interface ThreatContext {
@@ -59,13 +60,14 @@ interface ScoreComponents {
 }
 
 // Store loaded JSON data
-let threatContextData: Record<string, ThreatContext>;
 let threatMitigationsData: Record<string, MitigationStrategy[]>;
 let bestPracticesData: Record<string, BestPractice>;
 let implementationExamplesData: Record<string, ImplementationExample[]>;
 let securityToolsData: { common: SecurityTool[], [key: string]: SecurityTool[] };
 let cweMitigationsData: Record<string, CweMitigation>;
 let severityActionsData: Record<string, SeverityAction>;
+let cvssVectorMappingData: Record<string, any>;
+let securityInfoLinksData: Record<string, Record<string, string>>;
 
 /**
  * Load all JSON configuration files at startup
@@ -74,11 +76,6 @@ async function loadJsonConfigs() {
   try {
     // Define paths
     const basePath = path.resolve(__dirname, '../utils');
-    
-    // Load all JSON files
-    threatContextData = JSON.parse(
-      await fs.readFile(path.join(basePath, 'threatContext.json'), 'utf8')
-    );
     
     threatMitigationsData = JSON.parse(
       await fs.readFile(path.join(basePath, 'threatMitigations.json'), 'utf8')
@@ -102,6 +99,16 @@ async function loadJsonConfigs() {
     
     severityActionsData = JSON.parse(
       await fs.readFile(path.join(basePath, 'severityActions.json'), 'utf8')
+    );
+    
+    // Load the new CVSS vector mapping file
+    cvssVectorMappingData = JSON.parse(
+      await fs.readFile(path.join(basePath, 'cvssVectorMapping.json'), 'utf8')
+    );
+    
+    // Load the security info links file
+    securityInfoLinksData = JSON.parse(
+      await fs.readFile(path.join(basePath, 'securityInfoLinks.json'), 'utf8')
     );
     
     console.log("✅ All threat modeling data files loaded successfully");
@@ -151,11 +158,11 @@ export async function getDetailedThreatInfo(req: Request, res: Response) {
     // If vulnerability exists but threat score is zero, update the threat score
     if (relatedVulnerability && 
        (threat.score.total === 0 || 
-        threat.score.details.damage === 0 && 
+        (threat.score.details.damage === 0 && 
         threat.score.details.reproducibility === 0 && 
         threat.score.details.exploitability === 0 && 
         threat.score.details.affectedUsers === 0 && 
-        threat.score.details.discoverability === 0)) {
+        threat.score.details.discoverability === 0))) {
       
       // Calculate scores based on vulnerability data
       const scores = calculateScoresFromVulnerability(relatedVulnerability);
@@ -184,16 +191,10 @@ export async function getDetailedThreatInfo(req: Request, res: Response) {
     }
     
     // Get additional threat context based on STRIDE category
-    const threatContext = getThreatContext(threat.type);
+    const threatContext = getEnhancedThreatContext(threat.type, relatedVulnerability);
     
     // Risk assessment details
     const riskAssessment = {
-      impactLevel: calculateImpactLevel(threat.score.total),
-      likelihoodLevel: calculateLikelihoodLevel(threat.score.details.exploitability),
-      riskLevel: calculateRiskLevel(
-        calculateImpactLevel(threat.score.total),
-        calculateLikelihoodLevel(threat.score.details.exploitability)
-      ),
       affectedAssets: getAffectedAssets(threat.type),
       potentialImpacts: getPotentialImpacts(threat.type),
     };
@@ -228,7 +229,7 @@ export async function getDetailedThreatInfo(req: Request, res: Response) {
  * @param {any} vulnerability - The vulnerability data to analyze
  * @returns {object} - An object containing the calculated scores
  */
-function calculateScoresFromVulnerability(vulnerability: any) {
+export function calculateScoresFromVulnerability(vulnerability: any) {
   // Base values
   const scoreComponents: ScoreComponents = {
     damage: 0,
@@ -362,11 +363,11 @@ export async function getSuggestedFixes(req: Request, res: Response) {
     // If vulnerability exists but threat score is zero, update the threat score
     if (relatedVulnerability && 
        (threat.score.total === 0 || 
-        threat.score.details.damage === 0 && 
+        (threat.score.details.damage === 0 && 
         threat.score.details.reproducibility === 0 && 
         threat.score.details.exploitability === 0 && 
         threat.score.details.affectedUsers === 0 && 
-        threat.score.details.discoverability === 0)) {
+        threat.score.details.discoverability === 0))) {
       
       // Calculate scores based on vulnerability data
       const scores = calculateScoresFromVulnerability(relatedVulnerability);
@@ -419,41 +420,7 @@ export async function getSuggestedFixes(req: Request, res: Response) {
   }
 }
 
-/**
- * Get mitigation suggestions based on threat type and vulnerability data
- * 
- * @param {string} threatType - The STRIDE category of the threat
- * @param {any} vulnerability - Related vulnerability data if available
- * @returns {Object} - Object containing general and specific mitigations
- */
-function getMitigationSuggestions(threatType: string, vulnerability: any) {
-  // Get general mitigations based on threat type from loaded JSON
-  const baseMitigations = threatMitigationsData[threatType] || threatMitigationsData['default'];
-  
-  const specifics = [];
-  
-  // Add vulnerability-specific mitigations if available
-  if (vulnerability) {
-    // Check for CWEs to provide more targeted suggestions
-    if (vulnerability.cwes && vulnerability.cwes.length > 0) {
-      const cweMitigations = getCweMitigations(vulnerability.cwes);
-      specifics.push(...cweMitigations);
-    }
-    
-    // Add severity-based recommendations
-    if (vulnerability.severity) {
-      const severityAction = getSeverityActions(vulnerability.severity);
-      if (severityAction) {
-        specifics.push(severityAction);
-      }
-    }
-  }
-  
-  return {
-    general: baseMitigations,
-    specific: specifics,
-  };
-}
+
 
 /**
  * Get mitigation suggestions based on CWE IDs
@@ -489,72 +456,171 @@ function getSeverityActions(severity: string) {
 }
 
 /**
- * Get additional context information for the threat type
+ * Get enhanced threat context with official links for the informational elements
  * 
  * @param {string} threatType - The STRIDE category of the threat
- * @returns {Object} - Context information for the threat type
+ * @param {any} vulnerability - The related vulnerability data if available
+ * @returns {Object} - Enhanced context information with official links
  */
-function getThreatContext(threatType: string) {
-  return threatContextData[threatType] || threatContextData['default'];
-}
+function getEnhancedThreatContext(threatType: string, vulnerability: any = null) {
 
-/**
- * Calculate impact level based on score
- * 
- * @param {number} score - The threat score
- * @returns {string} - Impact level category
- */
-function calculateImpactLevel(score: number): string {
-  if (score >= 8) return "Critical";
-  if (score >= 6) return "High";
-  if (score >= 4) return "Medium";
-  return "Low";
-}
-
-/**
- * Calculate likelihood level based on exploitability
- * 
- * @param {number} exploitability - The exploitability score
- * @returns {string} - Likelihood level category
- */
-function calculateLikelihoodLevel(exploitability: number): string {
-  if (exploitability >= 8) return "High";
-  if (exploitability >= 5) return "Medium";
-  return "Low";
-}
-
-/**
- * Calculate overall risk level based on impact and likelihood
- * 
- * @param {string} impact - Impact level category
- * @param {string} likelihood - Likelihood level category
- * @returns {string} - Overall risk level
- */
-function calculateRiskLevel(impact: string, likelihood: string): string {
-  const riskMatrix: Record<string, Record<string, string>> = {
-    "Critical": {
-      "High": "Critical",
-      "Medium": "High",
-      "Low": "High"
-    },
-    "High": {
-      "High": "High",
-      "Medium": "High",
-      "Low": "Medium"
-    },
-    "Medium": {
-      "High": "High",
-      "Medium": "Medium",
-      "Low": "Low"
-    },
-    "Low": {
-      "High": "Medium",
-      "Medium": "Low",
-      "Low": "Low"
-    }
+  // Create a deep copy to avoid modifying the original
+  const enrichedContext: {
+    description: string;
+    commonAttackVectors: string[];
+    securityPrinciples: string[];
+  } = {
+    description: "",
+    commonAttackVectors: [],
+    securityPrinciples: []
   };
   
-  return riskMatrix[impact]?.[likelihood] || "Medium";
+  // Adjust context based on CVSS vector if available
+  if (vulnerability.cvssVector) {
+    const vectorAdjustments = getAdjustmentsFromCVSSVector(vulnerability.cvssVector, threatType);
+    
+    if (vectorAdjustments.attackVectors.length > 0) {
+      // Prioritize these vectors
+      enrichedContext.commonAttackVectors = [
+        ...vectorAdjustments.attackVectors,
+        ...enrichedContext.commonAttackVectors.filter(vector => 
+          !vectorAdjustments.attackVectors.some(newVector => 
+            vector.toLowerCase().includes(newVector.toLowerCase())
+          )
+        )
+      ].slice(0, 8);
+    }
+    
+    if (vectorAdjustments.securityPrinciples.length > 0) {
+      // Prioritize these principles
+      enrichedContext.securityPrinciples = [
+        ...vectorAdjustments.securityPrinciples,
+        ...enrichedContext.securityPrinciples.filter(principle => 
+          !vectorAdjustments.securityPrinciples.some(newPrinciple => 
+            principle.toLowerCase().includes(newPrinciple.toLowerCase())
+          )
+        )
+      ].slice(0, 8);
+    }
+  }
+  
+  // Add official links to the context
+  return enrichContextWithLinks(enrichedContext);
+}
+
+/**
+ * Extract attack vectors and security principles from CVSS vector string
+ * 
+ * @param {string} cvssVector - CVSS vector string
+ * @param {string} threatType - STRIDE threat type
+ * @returns {Object} - Object with attack vectors and security principles
+ */
+function getAdjustmentsFromCVSSVector(cvssVector: string, threatType: string): {
+  attackVectors: string[],
+  securityPrinciples: string[]
+} {
+  const attackVectors: string[] = [];
+  const securityPrinciples: string[] = [];
+  
+  // Check if our data is loaded
+  if (!cvssVectorMappingData) {
+    console.error("CVSS vector mapping data not loaded");
+    return { attackVectors, securityPrinciples };
+  }
+  
+  // Parse CVSS vector components
+  const cvssComponents = cvssVector.split('/');
+  
+  // Extract individual vector elements (AV:N, AC:L, etc.)
+  cvssComponents.forEach(component => {
+    const trimmedComponent = component.trim();
+    
+    // Look up attack vectors from our JSON data
+    if (cvssVectorMappingData.attackVectors[trimmedComponent]) {
+      attackVectors.push(cvssVectorMappingData.attackVectors[trimmedComponent].vector);
+    }
+    
+    // Look up security principles from our JSON data
+    if (cvssVectorMappingData.securityPrinciples[trimmedComponent]) {
+      securityPrinciples.push(cvssVectorMappingData.securityPrinciples[trimmedComponent]);
+    }
+  });
+  
+  // Add threat-specific principles if the relevant CVSS components are present
+  if (cvssVectorMappingData.threatSpecificPrinciples[threatType]) {
+    const threatSpecific = cvssVectorMappingData.threatSpecificPrinciples[threatType];
+    
+    // Check if any of the conditions for this threat type are present in the CVSS vector
+    const hasRelevantCondition = threatSpecific.conditions.some((condition: string) => 
+      cvssComponents.some(component => component.trim() === condition)
+    );
+    
+    if (hasRelevantCondition) {
+      securityPrinciples.push(...threatSpecific.principles);
+    }
+  }
+  
+  return {
+    attackVectors,
+    securityPrinciples
+  };
+}
+
+/**
+ * Enrich context information with official links
+ * 
+ * @param {Object} context - The base context information
+ * @returns {Object} - Context enriched with official links
+ */
+function enrichContextWithLinks(context: any): any {
+  // Create a deep copy of the context
+  const enrichedContext = {
+    description: context.description,
+    commonAttackVectors: [],
+    securityPrinciples: []
+  };
+  
+  // Add link information to attack vectors
+  enrichedContext.commonAttackVectors = context.commonAttackVectors.map((vector: string) => {
+    // Try to find exact matches or partial matches in the links data
+    for (const [key, url] of Object.entries(securityInfoLinksData.attackVectors)) {
+      if (vector.toLowerCase().includes(key.toLowerCase()) || 
+          key.toLowerCase().includes(vector.toLowerCase())) {
+        return {
+          text: vector,
+          link: url
+        };
+      }
+    }
+    
+    // If no match is found, return with the fallback link
+    return {
+      text: vector,
+      link: `${securityInfoLinksData.fallbackLink}?query=${encodeURIComponent(vector)}`
+    };
+  });
+  
+  // Add link information to security principles
+  enrichedContext.securityPrinciples = context.securityPrinciples.map((principle: string) => {
+    // Try to find exact matches or partial matches in the links data
+    for (const [key, url] of Object.entries(securityInfoLinksData.securityPrinciples)) {
+      if (principle.toLowerCase().includes(key.toLowerCase()) || 
+          key.toLowerCase().includes(principle.toLowerCase())) {
+        return {
+          text: principle,
+          link: url
+        };
+      }
+    }
+    
+    // If no match is found, return with a general link
+    return {
+      text: principle,
+      link: `https://cheatsheetseries.owasp.org/cheatsheets/Secure_Coding_Practices-Quick_Reference_Guide.html`
+    };
+  });
+  
+  return enrichedContext;
 }
 
 /**
@@ -593,6 +659,43 @@ function getPotentialImpacts(threatType: string): string[] {
   };
   
   return impactsByThreatType[threatType] || ["Multiple security impacts"];
+}
+
+
+/**
+ * Get mitigation suggestions based on threat type and vulnerability data
+ * 
+ * @param {string} threatType - The STRIDE category of the threat
+ * @param {any} vulnerability - Related vulnerability data if available
+ * @returns {Object} - Object containing general and specific mitigations
+ */
+function getMitigationSuggestions(threatType: string, vulnerability: any) {
+  // Get general mitigations based on threat type from loaded JSON
+  const baseMitigations = threatMitigationsData[threatType] || threatMitigationsData['default'];
+  
+  const specifics = [];
+  
+  // Add vulnerability-specific mitigations if available
+  if (vulnerability) {
+    // Check for CWEs to provide more targeted suggestions
+    if (vulnerability.cwes && vulnerability.cwes.length > 0) {
+      const cweMitigations = getCweMitigations(vulnerability.cwes);
+      specifics.push(...cweMitigations);
+    }
+    
+    // Add severity-based recommendations
+    if (vulnerability.severity) {
+      const severityAction = getSeverityActions(vulnerability.severity);
+      if (severityAction) {
+        specifics.push(severityAction);
+      }
+    }
+  }
+  
+  return {
+    general: baseMitigations,
+    specific: specifics,
+  };
 }
 
 /**

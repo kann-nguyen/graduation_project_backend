@@ -1,0 +1,53 @@
+{
+  "attackVectors": {
+    "Network-based remote attack": "https://owasp.org/www-community/attacks/Brute_force_attack",
+    "Adjacent network attack": "https://owasp.org/www-community/attacks/ARP_Spoofing",
+    "Cross-site scripting": "https://owasp.org/www-community/attacks/xss/",
+    "SQL injection": "https://owasp.org/www-community/attacks/SQL_Injection",
+    "Client-side tampering": "https://owasp.org/www-community/attacks/DOM_Based_XSS",
+    "Path traversal": "https://owasp.org/www-community/attacks/Path_Traversal",
+    "Brute force": "https://owasp.org/www-community/attacks/Brute_force_attack",
+    "Phishing": "https://owasp.org/www-community/attacks/Phishing",
+    "Social engineering": "https://owasp.org/www-community/attacks/Social_Engineering",
+    "Session hijacking": "https://owasp.org/www-community/attacks/Session_hijacking_attack",
+    "Man-in-the-middle": "https://owasp.org/www-community/attacks/Man-in-the-middle_attack",
+    "Command injection": "https://owasp.org/www-community/attacks/Command_Injection",
+    "Denial of Service": "https://owasp.org/www-community/attacks/Denial_of_Service",
+    "Distributed Denial of Service": "https://owasp.org/www-community/attacks/Denial_of_Service",
+    "Buffer overflow": "https://owasp.org/www-community/vulnerabilities/Buffer_Overflow"
+  },
+  "securityPrinciples": {
+    "Multi-factor authentication": "https://cheatsheetseries.owasp.org/cheatsheets/Multifactor_Authentication_Cheat_Sheet.html",
+    "Defense in depth": "https://cheatsheetseries.owasp.org/cheatsheets/Defense_in_Depth_Cheat_Sheet.html",
+    "Principle of least privilege": "https://cheatsheetseries.owasp.org/cheatsheets/Authorization_Cheat_Sheet.html",
+    "Input validation": "https://cheatsheetseries.owasp.org/cheatsheets/Input_Validation_Cheat_Sheet.html",
+    "Strong authentication": "https://cheatsheetseries.owasp.org/cheatsheets/Authentication_Cheat_Sheet.html",
+    "Data encryption": "https://cheatsheetseries.owasp.org/cheatsheets/Cryptographic_Storage_Cheat_Sheet.html",
+    "Secure coding practices": "https://owasp.org/www-project-secure-coding-practices-quick-reference-guide/",
+    "Security by design": "https://cheatsheetseries.owasp.org/cheatsheets/Security_by_Design_Principles_Cheat_Sheet.html",
+    "Zero trust architecture": "https://www.nist.gov/publications/zero-trust-architecture",
+    "Secure session management": "https://cheatsheetseries.owasp.org/cheatsheets/Session_Management_Cheat_Sheet.html",
+    "Network segmentation": "https://csrc.nist.gov/publications/detail/sp/800-207/final",
+    "Identity verification": "https://pages.nist.gov/800-63-3/",
+    "Secure deployment": "https://owasp.org/www-project-devsecops-guideline/"
+  },
+  "affectedAssets": {
+    "Authentication systems": "https://cheatsheetseries.owasp.org/cheatsheets/Authentication_Cheat_Sheet.html",
+    "User accounts": "https://cheatsheetseries.owasp.org/cheatsheets/Credential_Stuffing_Prevention_Cheat_Sheet.html",
+    "Databases": "https://cheatsheetseries.owasp.org/cheatsheets/Database_Security_Cheat_Sheet.html",
+    "Configuration files": "https://cheatsheetseries.owasp.org/cheatsheets/XML_Security_Cheat_Sheet.html",
+    "Logging systems": "https://cheatsheetseries.owasp.org/cheatsheets/Logging_Cheat_Sheet.html",
+    "File storage": "https://cheatsheetseries.owasp.org/cheatsheets/File_Upload_Cheat_Sheet.html",
+    "Web servers": "https://cheatsheetseries.owasp.org/cheatsheets/Web_Service_Security_Cheat_Sheet.html",
+    "API endpoints": "https://cheatsheetseries.owasp.org/cheatsheets/REST_Security_Cheat_Sheet.html"
+  },
+  "potentialImpacts": {
+    "Unauthorized access": "https://owasp.org/www-community/Broken_Authentication",
+    "Data breach": "https://owasp.org/www-project-top-ten/",
+    "Data corruption": "https://owasp.org/www-community/vulnerabilities/Improper_Data_Validation",
+    "Service unavailability": "https://owasp.org/www-community/attacks/Denial_of_Service",
+    "Privacy violations": "https://owasp.org/www-project-mobile-top-10/2016-risks/m2-insecure-data-storage",
+    "Compliance violations": "https://owasp.org/www-project-security-and-privacy-by-design-project/"
+  },
+  "fallbackLink": "https://owasp.org/www-community/attacks/"
+}

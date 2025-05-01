@@ -91,3 +91,81 @@ export async function update(req: Request, res: Response) {
     return res.json(errorResponse(`Internal server error: ${error}`));
   }
 }
+
+/**
+ * Utility function to recalculate scores for all threats with zero scores
+ * This can be called via an API endpoint or run as a maintenance task
+ */
+export async function recalculateZeroScores(req: Request, res: Response) {
+  try {
+    // Find all threats with zero total scores
+    const zeroScoreThreats = await ThreatModel.find({
+      $or: [
+        { 'score.total': 0 },
+        { 
+          $and: [
+            { 'score.details.damage': 0 },
+            { 'score.details.reproducibility': 0 },
+            { 'score.details.exploitability': 0 },
+            { 'score.details.affectedUsers': 0 },
+            { 'score.details.discoverability': 0 }
+          ]
+        }
+      ]
+    });
+
+    // Import the score calculation function
+    const { calculateScoresFromVulnerability } = require('./threatModeling.controller');
+    
+    // Count of successfully updated threats
+    let updatedCount = 0;
+    
+    // Process each threat with zero score
+    for (const threat of zeroScoreThreats) {
+      // Find any artifact containing this threat to get the vulnerability data
+      const artifact = await ArtifactModel.findOne({
+        threatList: threat._id
+      });
+      
+      // Find the corresponding vulnerability based on threat.name (which is the CVE ID)
+      const relatedVulnerability = artifact?.vulnerabilityList?.find(
+        (vuln) => vuln.cveId === threat.name
+      );
+      
+      // If we found a related vulnerability, calculate and update the score
+      if (relatedVulnerability) {
+        // Calculate scores based on vulnerability data
+        const scores = calculateScoresFromVulnerability(relatedVulnerability);
+        
+        // Update the threat with the calculated scores
+        await ThreatModel.findByIdAndUpdate(threat._id, {
+          $set: {
+            'score.total': scores.total,
+            'score.details': {
+              damage: scores.details.damage,
+              reproducibility: scores.details.reproducibility,
+              exploitability: scores.details.exploitability,
+              affectedUsers: scores.details.affectedUsers,
+              discoverability: scores.details.discoverability
+            }
+          }
+        });
+        
+        updatedCount++;
+      }
+    }
+    
+    return res.json(
+      successResponse(
+        { 
+          totalZeroScores: zeroScoreThreats.length,
+          updatedCount: updatedCount 
+        },
+        `Found ${zeroScoreThreats.length} threats with zero scores, updated ${updatedCount} successfully.`
+      )
+    );
+  } catch (error) {
+    console.error('Error recalculating zero scores:', error);
+    return res.json(errorResponse(`Internal server error: ${error}`));
+  }
+}

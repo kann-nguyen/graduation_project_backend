@@ -1,0 +1,87 @@
+{
+  "attackVectors": {
+    "AV:N": {
+      "vector": "Network-based remote attack",
+      "description": "The vulnerability can be exploited remotely over a network without requiring local access"
+    },
+    "AV:A": {
+      "vector": "Adjacent network attack (local network access required)",
+      "description": "The vulnerability can only be exploited by an attacker on the same physical or logical network"
+    },
+    "AV:L": {
+      "vector": "Local attack (requires local system access)",
+      "description": "The vulnerability requires the attacker to have local access or a local account on the system"
+    },
+    "AV:P": {
+      "vector": "Physical access attack",
+      "description": "The vulnerability requires physical access to the vulnerable component"
+    },
+    "AC:L": {
+      "vector": "Low-complexity attack (minimal conditions required)",
+      "description": "The attack can be performed with minimal conditions and is reliable in most circumstances"
+    },
+    "AC:H": {
+      "vector": "High-complexity attack (special conditions required)",
+      "description": "The attack requires specific conditions or preparation that makes exploitation more difficult"
+    },
+    "PR:N": {
+      "vector": "No privilege required (unauthenticated attack)",
+      "description": "The attacker does not need any authentication to exploit the vulnerability"
+    },
+    "PR:L": {
+      "vector": "Low privilege required (basic user access)",
+      "description": "The attacker needs basic user privileges to exploit the vulnerability"
+    },
+    "PR:H": {
+      "vector": "High privilege required (administrative access)",
+      "description": "The attacker requires administrative privileges to exploit the vulnerability"
+    },
+    "UI:R": {
+      "vector": "User interaction required (social engineering)",
+      "description": "The attack requires a user to perform some action to complete the exploit"
+    },
+    "UI:N": {
+      "vector": "No user interaction required (automated attack)",
+      "description": "The attack can be performed without any user interaction"
+    }
+  },
+  "securityPrinciples": {
+    "AV:N": "Network-level security controls",
+    "AV:A": "Network segmentation",
+    "AV:L": "Physical security measures",
+    "AV:P": "Physical access restrictions",
+    "AC:L": "Defense in depth (multiple protective layers)",
+    "PR:N": "Strong authentication controls",
+    "PR:L": "Principle of least privilege",
+    "UI:R": "Security awareness training",
+    "C:H": "Data encryption (at rest and in transit)",
+    "I:H": "Data integrity verification mechanisms",
+    "A:H": "Service redundancy and high availability design"
+  },
+  "threatSpecificPrinciples": {
+    "Spoofing": {
+      "conditions": ["PR:N", "PR:L", "C:H"],
+      "principles": ["Multi-factor authentication (MFA)"]
+    },
+    "Tampering": {
+      "conditions": ["I:H"],
+      "principles": ["Digital signatures for critical data"]
+    },
+    "Repudiation": {
+      "conditions": ["I:H", "PR:N", "PR:L"],
+      "principles": ["Secure audit logging with integrity protection"]
+    },
+    "Information Disclosure": {
+      "conditions": ["C:H"],
+      "principles": ["Data classification and handling procedures"]
+    },
+    "Denial of Service": {
+      "conditions": ["A:H"],
+      "principles": ["Load balancing and autoscaling infrastructure"]
+    },
+    "Elevation of Privilege": {
+      "conditions": ["PR:N", "PR:L", "I:H"],
+      "principles": ["Granular access control policies"]
+    }
+  }
+}
