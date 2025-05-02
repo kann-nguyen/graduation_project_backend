@@ -34,8 +34,15 @@ export async function getAll(req: Request, res: Response) {
       projectName: projectName as string 
     };
     
-    // If user is not a manager, only show tickets assigned to them and exclude completed statuses
-    if (account.role !== "manager") {
+    // Adjust query based on user role
+    if (account.role === "admin" || account.role === "project_manager") {
+      // Admin and Project Manager can see all tickets for their project
+    } else if (account.role === "security_expert") {
+      // Security expert can see all security-related tickets regardless of assignee
+      // but doesn't need to see resolved tickets by default
+      query.status = { $nin: ["Resolved"] };
+    } else {
+      // Regular member can only see tickets assigned to them
       query.assignee = user._id.toString();
       query.status = { $nin: ["Not accepted", "Resolved"] };
     }
@@ -225,8 +232,9 @@ export async function updateState(req: Request, res: Response) {
     }
 
     if (currentTicket.status === "Not accepted" && data.status === "Processing") {
-      if (account.role !== "manager") {
-        return res.json(errorResponse("Only managers can change ticket to Processing state"));
+      // Allow both project_manager and security_expert to change ticket to Processing state
+      if (account.role !== "project_manager" && account.role !== "security_expert" && account.role !== "admin") {
+        return res.json(errorResponse("Only project managers or security experts can change ticket to Processing state"));
       }
     } else if (currentTicket.status === "Processing" && data.status === "Submitted") {
       if (currentTicket.assignee?._id.toString() !== user._id.toString()) {

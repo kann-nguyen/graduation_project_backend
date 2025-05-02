@@ -19,22 +19,33 @@ export interface Account extends Base {}
     await AccountModel.findByIdAndUpdate(account?._id, {
       permission: permissions,
     });
-  } else if (this.role === "manager") {
+  } else if (this.role === "project_manager") {
+    // Project manager has access to all project-related permissions
     const perm = permissions.filter((p) => {
-      if (!p.includes("user")) return true;
+      return !p.includes("user") && 
+             (p.includes("project") || p.includes("phase") || p.includes("artifact") || 
+              p.includes("task"));
+    });
+    await AccountModel.findByIdAndUpdate(account?._id, {
+      permission: perm,
+    });
+  } else if (this.role === "security_expert") {
+    // Security expert has access to all security-related permissions
+    const perm = permissions.filter((p) => {
+      return !p.includes("user") && 
+             (p.includes("ticket") || p.includes("threat") || p.includes("vulnerability") || 
+              p.includes("mitigation"));
     });
     await AccountModel.findByIdAndUpdate(account?._id, {
       permission: perm,
     });
   } else {
+    // Regular member with limited permissions
     const perm = permissions.filter((p) => {
-      if (
-        !p.includes("user") &&
-        p.includes("phase") &&
-        !p.includes("project") &&
-        !p.includes("artifact")
-      )
-        return true;
+      return !p.includes("user") && 
+             !p.includes("project") && 
+             !p.includes("artifact") &&
+             p.includes("read");
     });
     await AccountModel.findByIdAndUpdate(account?._id, {
       permission: perm,
@@ -79,7 +90,7 @@ export class Account {
   public scanner!: AccountScanner;
 
   @prop({
-    enum: ["admin", "manager", "member"],
+    enum: ["admin", "project_manager", "security_expert", "member"],
     default: "member",
     type: String,
   })

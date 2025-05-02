@@ -59,41 +59,51 @@ export async function getById(req: Request, res: Response) {
 
 // Create a new account
 export async function create(req: Request, res: Response) {
-  const { username, password, confirmPassword, email } = req.body;
-  if (password !== confirmPassword) {
-    return res.json(errorResponse("Passwords do not match"));
-  }
-  // Check if account exists
-  const accountExists = await AccountModel.findOne({ username });
-  if (accountExists) {
-    return res.json(errorResponse("Username already exists"));
-  }
-  const emailUsed = await AccountModel.findOne({ email });
-  if (emailUsed) {
-    return res.json(errorResponse("Email already used"));
-  }
-  // Hash password
-  const hashedPassword = await bcrypt.hash(password, 10);
-  // Create account
   try {
+    
+    const { username, password, confirmPassword, email, role } = req.body;
+    
+    
+    if (password !== confirmPassword) {
+      return res.status(400).json(errorResponse("Passwords do not match"));
+    }
+    
+    // Check if account exists
+    const accountExists = await AccountModel.findOne({ username });
+    if (accountExists) {
+      return res.status(400).json(errorResponse("Username already exists"));
+    }
+    
+    const emailUsed = await AccountModel.findOne({ email });
+    if (emailUsed) {
+      return res.status(400).json(errorResponse("Email already used"));
+    }
+        
+    // Hash password
+    const hashedPassword = await bcrypt.hash(password, 10);
+    
+    // Create account with specified role or default to "member"
     const newAccount = await AccountModel.create({
       username,
       password: hashedPassword,
       email,
+      role: role || "member", // Use provided role or default to "member"
     });
+        
     // Create user
     const name = generateRandomName();
-    await UserModel.create({ account: newAccount._id, name });
+    const newUser = await UserModel.create({ account: newAccount._id, name });
+    
     await ChangeHistoryModel.create({
       objectId: newAccount._id,
       action: "create",
       timestamp: Date.now(),
-      description: `Account ${newAccount.username} is created`,
+      description: `Account ${newAccount.username} is created with role: ${newAccount.role}`,
       account: newAccount._id,
     });
-    return res.json(successResponse(null, "Account created"));
+    return res.status(201).json(successResponse(null, "Account created"));
   } catch (error) {
-    return res.json(errorResponse(`Internal server error: ${error}`));
+    return res.status(500).json(errorResponse(`Internal server error: ${(error as Error).message}`));
   }
 }
 
@@ -255,7 +265,7 @@ export async function updateGitlabAccessToken(req: Request, res: Response) {
   }
 }
 
-//xóa kết nổi github
+//xóa kết nối github
 export async function disconnectFromGithub(req: Request, res: Response) {
   const account = req.user;
   try {
