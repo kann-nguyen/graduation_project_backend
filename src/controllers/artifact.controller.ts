@@ -160,7 +160,6 @@ function createThreatFromVuln(vuln: any, artifactType: string): Partial<Threat> 
     name: vuln.cveId,
     description: vuln.description ?? "Have no des",
     type: threatType ?? "Spoofing",
-    mitigation: ["Pending mitigation plan"],
     status: "Non mitigated",
     score: scoreData,
   };

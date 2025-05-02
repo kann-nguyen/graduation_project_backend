@@ -1,50 +1,11 @@
 import { Request, Response } from "express";
-import { ThreatModel, ArtifactModel } from "../models/models";
+import { ThreatModel, ArtifactModel, MitigationModel } from "../models/models";
 import { errorResponse, successResponse } from "../utils/responseFormat";
 import * as fs from 'fs/promises';
 import * as path from 'path';
-import { string } from "zod";
-
-// Interfaces to type our JSON data
-interface ThreatContext {
-  description: string;
-  commonAttackVectors: string[];
-  securityPrinciples: string[];
-}
+import mongoose from "mongoose";
 
 interface MitigationStrategy {
-  title: string;
-  description: string;
-  implementation: string;
-  securityControls?: string[];
-}
-
-interface BestPractice {
-  title: string;
-  practices: string[];
-  standards: string[];
-}
-
-interface ImplementationExample {
-  title: string;
-  language: string;
-  description: string;
-  code: string;
-}
-
-interface SecurityTool {
-  name: string;
-  description: string;
-  url: string;
-}
-
-interface CweMitigation {
-  title: string;
-  description: string;
-  implementation: string;
-}
-
-interface SeverityAction {
   title: string;
   description: string;
   implementation: string;
@@ -60,10 +21,7 @@ interface ScoreComponents {
 }
 
 // Store loaded JSON data
-let bestPracticesData: Record<string, BestPractice>;
-let implementationExamplesData: Record<string, ImplementationExample[]>;
-let cweMitigationsData: Record<string, CweMitigation>;
-let severityActionsData: Record<string, SeverityAction>;
+let cweMitigationsData: Record<string, MitigationStrategy>;
 let cvssVectorMappingData: Record<string, any>;
 let securityInfoLinksData: Record<string, Record<string, string>>;
 
@@ -82,20 +40,8 @@ async function loadJsonConfigs() {
     // Define paths
     const basePath = path.resolve(__dirname, '../utils');
     
-    bestPracticesData = JSON.parse(
-      await fs.readFile(path.join(basePath, 'threatBestPractices.json'), 'utf8')
-    );
-    
-    implementationExamplesData = JSON.parse(
-      await fs.readFile(path.join(basePath, 'implementationExamples.json'), 'utf8')
-    );
-    
     cweMitigationsData = JSON.parse(
       await fs.readFile(path.join(basePath, 'cweMitigations.json'), 'utf8')
-    );
-    
-    severityActionsData = JSON.parse(
-      await fs.readFile(path.join(basePath, 'severityActions.json'), 'utf8')
     );
     
     // Load the CVSS vector mapping file
@@ -567,8 +513,13 @@ export async function getSuggestedFixes(req: Request, res: Response) {
   const { id } = req.params;
   
   try {
-    // Get the threat and related vulnerability data
-    const threat = await ThreatModel.findById(id);
+// Validate ID
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.json(errorResponse("Invalid threat ID format"));
+    }
+
+    // Get the threat and populate its mitigations
+    const threat = await ThreatModel.findById(id).populate('mitigations');
     
     if (!threat) {
       return res.json(errorResponse("Threat not found"));
@@ -611,33 +562,28 @@ export async function getSuggestedFixes(req: Request, res: Response) {
       });
     }
     
-    // Get mitigation suggestions based on threat type
+// Check if the threat already has structured mitigations
+    const existingMitigations = threat.mitigations?.length ? 
+      threat.mitigations.map((m: any) => ({
+        _id: m._id,
+        title: m.title,
+        description: m.description,
+        implementation: m.implementation,
+        isImplemented: m.isImplemented
+      })) : [];
+
+    // Generate new mitigation suggestions based on threat type
     const mitigationSuggestions = getMitigationSuggestions(
       threat.type,
       relatedVulnerability
     );
     
-    // Get best practices that are specific to the mitigation suggestions
-    const bestPractices = getSpecificBestPractices(
-      threat.type, 
-      mitigationSuggestions, 
-      relatedVulnerability
-    );
-    
-    // Get implementation examples specific to the mitigation suggestions
-    // const implementationExamples = getSpecificImplementationExamples(
-    //   threat.type, 
-    //   mitigationSuggestions, 
-    //   relatedVulnerability
-    // );
-    
     return res.json(
       successResponse(
         {
           threat,
+          existingMitigations,
           mitigationSuggestions,
-          bestPractices,
-          //implementationExamples,
         },
         "Mitigation suggestions retrieved successfully"
       )
@@ -855,8 +801,7 @@ function generatePrimaryMitigation(context: any): MitigationStrategy | null {
     return {
       title: mitigation.title,
       description: description,
-      implementation: implementation,
-      securityControls: mitigation.securityControls
+      implementation: implementation
     };
   }
   
@@ -896,8 +841,7 @@ function generatePrimaryMitigation(context: any): MitigationStrategy | null {
           return {
             title: mitigation.title,
             description: `${context.isCritical ? 'Critical: ' : ''}${mitigation.description}`,
-            implementation: implementation,
-            securityControls: mitigation.securityControls
+            implementation: implementation
           };
         }
       }
@@ -933,13 +877,7 @@ function generatePrimaryMitigation(context: any): MitigationStrategy | null {
         return {
           title: cweMitigation.title,
           description: `${context.isCritical ? 'Critical: ' : ''}${cweMitigation.description}`,
-          implementation: implementation,
-          securityControls: [
-            "CWE-Specific Controls", 
-            context.isNetworkBased ? "Network Security" : "Local Security",
-            context.isLowComplexity ? "Defense in Depth" : "Targeted Protection",
-            "Secure Coding"
-          ]
+          implementation: implementation
         };
       }
     }
@@ -961,8 +899,7 @@ function generatePrimaryMitigation(context: any): MitigationStrategy | null {
         return {
           title: mitigation.title,
           description: `${context.isCritical ? 'Critical: ' : ''}${mitigation.description}`,
-          implementation: mitigation.implementation,
-          securityControls: mitigation.securityControls
+          implementation: mitigation.implementation
         };
       }
     }
@@ -1040,8 +977,7 @@ function getGeneralMitigation(threatType: string): MitigationStrategy {
     return {
       title: "Implement Security Controls",
       description: "Address security vulnerability",
-      implementation: "Implement proper input validation and output encoding. Apply security controls according to the vulnerability type. Follow security best practices for your specific technology stack.",
-      securityControls: ["Input Validation", "Output Encoding", "Security Best Practices"]
+      implementation: "Implement proper input validation and output encoding. Apply security controls according to the vulnerability type. Follow security best practices for your specific technology stack."
     };
   }
   
@@ -1051,150 +987,4 @@ function getGeneralMitigation(threatType: string): MitigationStrategy {
     implementation: "Implement proper input validation and output encoding. Apply security controls according to the vulnerability type. Follow security best practices for your specific technology stack.",
     securityControls: ["Input Validation", "Output Encoding", "Security Best Practices"]
   };
-}
-
-/**
- * Get best practices for each threat type
- * 
- * @param {string} threatType - The STRIDE category of the threat
- * @returns {Object} - Best practices for the threat type
- */
-function getBestPracticesForThreatType(threatType: string): any {
-  return bestPracticesData[threatType] || bestPracticesData['default'];
-}
-
-/**
- * Get specific best practices for the identified mitigations
- * 
- * @param {string} threatType - The STRIDE category of the threat
- * @param {any} mitigationSuggestions - The suggested mitigations 
- * @param {any} vulnerability - Related vulnerability data if available
- * @returns {Object} - Best practices tailored to the specific mitigations
- */
-function getSpecificBestPractices(threatType: string, mitigationSuggestions: any, vulnerability: any = null): any {
-  // Get base best practices from the threat type
-  const baseBestPractices = getBestPracticesForThreatType(threatType);
-  
-  // Create a new object for the specific best practices
-  const specificBestPractices = {
-    title: baseBestPractices.title,
-    practices: [...baseBestPractices.practices],
-    standards: [...baseBestPractices.standards]
-  };
-  
-  // If we have mitigation suggestions, refine the best practices
-  if (mitigationSuggestions && mitigationSuggestions.specific && mitigationSuggestions.specific.length > 0) {
-    // Extract keywords from mitigation titles and implementations
-    const mitigationKeywords: string[] = [];
-    
-    mitigationSuggestions.specific.forEach((mitigation: MitigationStrategy) => {
-      // Extract keywords from the mitigation title and implementation
-      const titleWords = mitigation.title.toLowerCase().split(/\s+/);
-      const implementationWords = mitigation.implementation.toLowerCase().split(/\s+/);
-      
-      // Add significant keywords (filtering out common words)
-      const commonWords = ['the', 'a', 'an', 'and', 'or', 'for', 'to', 'in', 'on', 'with', 'by', 'of'];
-      
-      titleWords.forEach(word => {
-        if (word.length > 3 && !commonWords.includes(word) && !mitigationKeywords.includes(word)) {
-          mitigationKeywords.push(word);
-        }
-      });
-      
-      implementationWords.forEach(word => {
-        if (word.length > 3 && !commonWords.includes(word) && !mitigationKeywords.includes(word)) {
-          mitigationKeywords.push(word);
-        }
-      });
-      
-      // If security controls are provided, add them as keywords
-      if (mitigation.securityControls) {
-        mitigation.securityControls.forEach((control: string) => {
-          const controlWords = control.toLowerCase().split(/\s+/);
-          controlWords.forEach(word => {
-            if (word.length > 3 && !commonWords.includes(word) && !mitigationKeywords.includes(word)) {
-              mitigationKeywords.push(word);
-            }
-          });
-        });
-      }
-    });
-    
-    // If we have vulnerability-specific data, add more context
-    if (vulnerability && vulnerability.cwes) {
-      // Look for specific CWEs and add relevant best practices
-      const cwes = vulnerability.cwes || [];
-      
-      // Add CWE-specific best practices if they exist in our data
-      cwes.forEach((cwe: string) => {
-        const cweNumber = cwe.replace('CWE-', '');
-        
-        // If we have specific best practices for this CWE in our data, add them
-        if (bestPracticesData[`cwe-${cweNumber}`]) {
-          const cweBestPractices = bestPracticesData[`cwe-${cweNumber}`];
-          specificBestPractices.practices = [
-            ...specificBestPractices.practices,
-            ...cweBestPractices.practices.filter((practice: string) => 
-              !specificBestPractices.practices.includes(practice)
-            )
-          ];
-          
-          specificBestPractices.standards = [
-            ...specificBestPractices.standards,
-            ...cweBestPractices.standards.filter((standard: string) => 
-              !specificBestPractices.standards.includes(standard)
-            )
-          ];
-        }
-      });
-    }
-    
-    // Prioritize practices based on keywords
-    if (mitigationKeywords.length > 0) {
-      // Sort practices by relevance to the keywords
-      specificBestPractices.practices.sort((a: string, b: string) => {
-        const aRelevance = mitigationKeywords.reduce((score: number, keyword: string) => {
-          return score + (a.toLowerCase().includes(keyword) ? 1 : 0);
-        }, 0);
-        
-        const bRelevance = mitigationKeywords.reduce((score: number, keyword: string) => {
-          return score + (b.toLowerCase().includes(keyword) ? 1 : 0);
-        }, 0);
-        
-        return bRelevance - aRelevance;
-      });
-      
-      // Limit to most relevant practices
-      specificBestPractices.practices = specificBestPractices.practices.slice(0, 8);
-    }
-  }
-  
-  // Add primary STRIDE category best practice if not already included
-  const stridePractice = `Apply ${threatType} countermeasures in your security architecture.`;
-  if (!specificBestPractices.practices.includes(stridePractice)) {
-    specificBestPractices.practices.unshift(stridePractice);
-  }
-  
-  // Add relevant security standards if dealing with specific vulnerabilities
-  if (vulnerability && vulnerability.severity === 'critical') {
-    specificBestPractices.standards.unshift("OWASP ASVS Level 3 (Critical Applications)");
-  }
-  
-  return specificBestPractices;
-}
-
-/**
- * Get implementation examples and code snippets based on threat type
- * 
- * @param {string} threatType - The STRIDE category of the threat
- * @param {any} vulnerability - Related vulnerability data if available
- * @returns {Array} - Array of implementation examples
- */
-function getImplementationExamples(threatType: string, vulnerability: any): any[] {
-  // Get base examples from loaded JSON
-  const baseExamples = implementationExamplesData[threatType] || implementationExamplesData['default'];
-  
-  let examples = [...baseExamples];
-  
-  return examples;
 }

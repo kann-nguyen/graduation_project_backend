@@ -1,5 +1,6 @@
-import { pre, prop } from "@typegoose/typegoose";
+import { pre, prop, Ref } from "@typegoose/typegoose";
 import { Base } from "@typegoose/typegoose/lib/defaultClasses";
+import { Mitigation } from "./mitigation";
 
 /**
  * Interface kế thừa từ Base để sử dụng các thuộc tính mặc định của Typegoose
@@ -71,8 +72,8 @@ export class Threat {
   })
   public type!: string; // Loại threat (dựa trên STRIDE)
 
-  @prop({ type: [String], required: true, default: [] })
-  public mitigation!: string[]; // Các biện pháp giảm thiểu threat
+  @prop({ ref: () => Mitigation, default: [], type: () => [Object] })
+  public mitigations?: Ref<Mitigation>[]; // Structured mitigation strategies
 
   @prop({ type: Score, required: true })
   public score!: Score; // Điểm đánh giá của threat
