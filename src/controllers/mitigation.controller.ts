@@ -75,6 +75,10 @@ export async function create(req: Request, res: Response) {
   const userId = req.user?._id;
 
   try {
+    //check role is security expert
+    if (!req.user?.role || req.user.role !== "security_expert") {
+      return res.json(errorResponse("Unauthorized: Only security experts can create mitigations"));
+    }
     // Validate required fields
     if (!title || !description || !implementation) {
       return res.json(errorResponse("Missing required mitigation fields"));

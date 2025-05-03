@@ -102,7 +102,7 @@ export async function updateRateScan(req: Request, res: Response) {
 
   //check xem role có phải manager không
   const user = req.user;
-  if (!user || user.role !== "manager") {
+  if (!user || user.role !== "project_manager") {
     return res.json(errorResponse("You are not authorized to update this artifact"));
   }
   

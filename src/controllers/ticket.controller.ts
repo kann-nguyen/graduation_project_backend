@@ -11,7 +11,7 @@ import { scanArtifact } from "./phase.controller";
  */
 export async function getAll(req: Request, res: Response) {
   const { projectName } = req.query;
-  const userId = req.user?._id;
+  const accountId = req.user?._id;
 
   if (!projectName) {
     return res.json(errorResponse("Project name is required"));
@@ -19,7 +19,7 @@ export async function getAll(req: Request, res: Response) {
 
   try {
     // Get the user and their account to check role
-    const user = await UserModel.findOne({ account: userId });
+    const user = await UserModel.findOne({ account: accountId });
     if (!user) {
       return res.json(errorResponse("User not found"));
     }
@@ -34,14 +34,7 @@ export async function getAll(req: Request, res: Response) {
       projectName: projectName as string 
     };
     
-    // Adjust query based on user role
-    if (account.role === "admin" || account.role === "project_manager") {
-      // Admin and Project Manager can see all tickets for their project
-    } else if (account.role === "security_expert") {
-      // Security expert can see all security-related tickets regardless of assignee
-      // but doesn't need to see resolved tickets by default
-      query.status = { $nin: ["Resolved"] };
-    } else {
+    if (account.role === "member") {
       // Regular member can only see tickets assigned to them
       query.assignee = user._id.toString();
       query.status = { $nin: ["Not accepted", "Resolved"] };
@@ -90,7 +83,7 @@ export async function create(req: Request, res: Response) {
   const { data } = req.body;
   const userId = req.user?._id;
   try {
-    let user = await UserModel.findById("680b17c287d12044e8f04f95");
+  let user = null
   if(!userId) {
     user = await UserModel.findOne( {
       account: userId,
@@ -233,8 +226,8 @@ export async function updateState(req: Request, res: Response) {
 
     if (currentTicket.status === "Not accepted" && data.status === "Processing") {
       // Allow both project_manager and security_expert to change ticket to Processing state
-      if (account.role !== "project_manager" && account.role !== "security_expert" && account.role !== "admin") {
-        return res.json(errorResponse("Only project managers or security experts can change ticket to Processing state"));
+      if (account.role !== "security_expert") {
+        return res.json(errorResponse("Only security experts can change ticket to Processing state"));
       }
     } else if (currentTicket.status === "Processing" && data.status === "Submitted") {
       if (currentTicket.assignee?._id.toString() !== user._id.toString()) {

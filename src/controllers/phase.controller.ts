@@ -193,67 +193,80 @@ export async function addArtifactToPhase(req: Request, res: Response) {
   const { id } = req.params;
   const { data } = req.body;
   const { cpe, threatList} = data;
-  const userId = req.user?._id;
-  //log userId
-  console.log("UserId: " + userId);
+  
+  // Get account ID from authenticated user
+  const accountId = req.user?._id;
+  console.log("AccountId: " + accountId);
 
-  let user = await UserModel.findById("680b17c287d12044e8f04f95");
-  if(!userId) {
-    user = await UserModel.findOne( {
-      account: userId,
-    });
-  } 
-
-  if (!user) {
-    return res.json(errorResponse("User not found"));
-  }
-  data.projectId = user.projectIn[0].toString();
-
-  // Fetch vulnerabilities and threats before creating artifact
-  if (cpe) { 
-    try {
-      const vulns = await fetchVulnsFromNVD(cpe);
-      data.vulnerabilityList = vulns;
-    } catch (error) {
-      data.vulnerabilityList = [];
-      console.error("[ERROR] Failed to fetch vulnerabilities", error);
-    }
-  }
-
-  if (threatList) {
-    try {
-      const threats = await ThreatModel.find({ name: { $in: threatList } });
-      data.threatList = threats;
-    } catch (error) {
-      data.threatList = [];
-    }
-  }
-
+  let user = null;
   try {
-    data.state = "S1"; // ✅ Gán state ban đầu là S1
-    const artifact = await ArtifactModel.create(data);
+    // Find user with this account ID
+    if (accountId) {
+      user = await UserModel.findOne({ account: accountId });
+      console.log("Looking for user with account ID:", accountId);
+    }
+    
+    if (!user) {
+      return res.json(errorResponse("User not found"));
+    }
+    
+    data.projectId = user.projectIn[0]?.toString() || "";
+    
+    // Check if projectId exists
+    if (!data.projectId) {
+      console.log("No project associated with user");
+      return res.json(errorResponse("No project associated with user"));
+    }
 
-    // ✅ Thêm artifact vào phase ngay lập tức
-    await PhaseModel.findByIdAndUpdate(
-      id,
-      { $addToSet: { artifacts: artifact._id } },
-      { new: true }
-    );
-
-    // ✅ Trả về response ngay, để user thấy artifact trong phase
-    res.json(successResponse(null, "Artifact added to phase and scanning started in background"));
-
-    // ✅ Bắt đầu scan ở background
-    setImmediate(async () => {
+    // Fetch vulnerabilities and threats before creating artifact
+    if (cpe) { 
       try {
-        await scanArtifact(artifact, id);
+        const vulns = await fetchVulnsFromNVD(cpe);
+        data.vulnerabilityList = vulns;
       } catch (error) {
-        console.error("[ERROR] Scanning failed:", error);
+        data.vulnerabilityList = [];
+        console.error("[ERROR] Failed to fetch vulnerabilities", error);
       }
-    });
+    }
 
+    if (threatList) {
+      try {
+        const threats = await ThreatModel.find({ name: { $in: threatList } });
+        data.threatList = threats;
+      } catch (error) {
+        data.threatList = [];
+      }
+    }
+
+    try {
+      data.state = "S1"; // ✅ Gán state ban đầu là S1
+      const artifact = await ArtifactModel.create(data);
+
+      // ✅ Thêm artifact vào phase ngay lập tức
+      await PhaseModel.findByIdAndUpdate(
+        id,
+        { $addToSet: { artifacts: artifact._id } },
+        { new: true }
+      );
+
+      // ✅ Trả về response ngay, để user thấy artifact trong phase
+      res.json(successResponse(null, "Artifact added to phase and scanning started in background"));
+
+      // ✅ Bắt đầu scan ở background
+      setImmediate(async () => {
+        try {
+          await scanArtifact(artifact, id);
+        } catch (error) {
+          console.error("[ERROR] Scanning failed:", error);
+        }
+      });
+
+    } catch (error) {
+      console.error("[ERROR] Internal server error", error);
+      return res.json(errorResponse(`Internal server error: ${error}`));
+    }
   } catch (error) {
-    console.error("[ERROR] Internal server error", error);
+    console.error("[ERROR] User lookup failed", error);
     return res.json(errorResponse(`Internal server error: ${error}`));
   }
 }
@@ -290,10 +303,19 @@ export async function scanArtifact(artifact: Artifact, phaseId: string) {
         break;
       case "image":
         let url = `${process.env.IMAGE_SCANNING_URL}/scan`;
+        
+        // Create a custom HTTPS agent that ignores SSL certificate errors
+        // This is useful for development/testing with ngrok
+        const https = require('https');
+        const httpsAgent = new https.Agent({
+          rejectUnauthorized: false // Ignore SSL certificate verification
+        });
+        
         await axios.get(url, {
           params: {
             name: `${artifact.name}:${artifact.version}`,
           },
+          httpsAgent // Use the custom agent to bypass SSL verification
         });
         console.log(`Image scanning triggered for artifact: ${artifact.name}`);
         break;
