@@ -10,7 +10,7 @@ import {
 } from "../models/models";
 import { errorResponse, successResponse } from "../utils/responseFormat";
 import generateRandomName from "../utils/generateName";
-
+import permissions from "../utils/permission"; // Fixed import statement
 
 // Get account details of the authenticated user
 export async function get(req: Request, res: Response) {
@@ -60,28 +60,26 @@ export async function getById(req: Request, res: Response) {
 // Create a new account
 export async function create(req: Request, res: Response) {
   try {
-    
     const { username, password, confirmPassword, email, role } = req.body;
-    
-    
+
     if (password !== confirmPassword) {
       return res.status(400).json(errorResponse("Passwords do not match"));
     }
-    
+
     // Check if account exists
     const accountExists = await AccountModel.findOne({ username });
     if (accountExists) {
       return res.status(400).json(errorResponse("Username already exists"));
     }
-    
+
     const emailUsed = await AccountModel.findOne({ email });
     if (emailUsed) {
       return res.status(400).json(errorResponse("Email already used"));
     }
-        
+
     // Hash password
     const hashedPassword = await bcrypt.hash(password, 10);
-    
+
     // Create account with specified role or default to "member"
     const newAccount = await AccountModel.create({
       username,
@@ -89,11 +87,11 @@ export async function create(req: Request, res: Response) {
       email,
       role: role || "member", // Use provided role or default to "member"
     });
-        
+
     // Create user
     const name = generateRandomName();
     const newUser = await UserModel.create({ account: newAccount._id, name });
-    
+
     await ChangeHistoryModel.create({
       objectId: newAccount._id,
       action: "create",
@@ -101,9 +99,13 @@ export async function create(req: Request, res: Response) {
       description: `Account ${newAccount.username} is created with role: ${newAccount.role}`,
       account: newAccount._id,
     });
-    return res.status(201).json(successResponse(null, "Account created"));
+    return res
+      .status(201)
+      .json(successResponse(null, "Account created"));
   } catch (error) {
-    return res.status(500).json(errorResponse(`Internal server error: ${(error as Error).message}`));
+    return res
+      .status(500)
+      .json(errorResponse(`Internal server error: ${(error as Error).message}`));
   }
 }
 
@@ -136,31 +138,87 @@ export async function changePassword(req: Request, res: Response) {
   }
 }
 
-
 //update thông tin tài khoản
 export async function updateAccountInfo(req: Request, res: Response) {
   const { id } = req.params;
   const { data } = req.body;
   if (!data) return res.json(errorResponse("Missing payload"));
-  // Update account info
+
   try {
+    // Get current account info to check for role changes
+    const currentAccount = await AccountModel.findById(id);
+    if (!currentAccount) return res.json(errorResponse("Account not found"));
+
+    // Update account info first
     const account = await AccountModel.findByIdAndUpdate(id, data, {
       new: true,
     });
-    if (!account) return res.json(errorResponse("Account not found"));
+
+    // If role is being changed, update permissions accordingly
+    if (data.role && data.role !== currentAccount.role) {
+      let updatedPermissions;
+
+      // If changed to admin, grant all permissions
+      if (data.role === "admin") {
+        updatedPermissions = permissions;
+      }
+      // If changed to project_manager, grant project-related permissions
+      else if (data.role === "project_manager") {
+        updatedPermissions = permissions.filter((p) => {
+          return (
+            !p.includes("user") &&
+            (p.includes("project") ||
+              p.includes("phase") ||
+              p.includes("artifact") ||
+              p.includes("task"))
+          );
+        });
+      }
+      // If changed to security_expert, grant security-related permissions
+      else if (data.role === "security_expert") {
+        updatedPermissions = permissions.filter((p) => {
+          return (
+            !p.includes("user") &&
+            (p.includes("ticket") ||
+              p.includes("threat") ||
+              p.includes("vulnerability") ||
+              p.includes("mitigation"))
+          );
+        });
+      }
+      // If changed to member, grant limited read permissions
+      else {
+        updatedPermissions = permissions.filter((p) => {
+          return (
+            !p.includes("user") &&
+            !p.includes("project") &&
+            !p.includes("artifact") &&
+            p.includes("read")
+          );
+        });
+      }
+
+      // Update permissions based on new role
+      await AccountModel.findByIdAndUpdate(id, {
+        permission: updatedPermissions,
+      });
+    }
+
     await ChangeHistoryModel.create({
-      objectId: account._id,
+      objectId: account?._id || null,
       action: "update",
       timestamp: Date.now(),
-      description: `Account ${account.username} is updated`,
+      description: `Account ${account?.username || "unknown"} is updated${
+        data.role ? ` with new role: ${data.role}` : ""
+      }`,
       account: req.user?._id,
     });
+
     return res.json(successResponse(null, "Account info updated"));
   } catch (error) {
     return res.json(errorResponse(`Internal server error: ${error}`));
   }
 }
-
 
 //remove tài khoản
 export async function remove(req: Request, res: Response) {
@@ -181,18 +239,32 @@ export async function updateAccountPermission(req: Request, res: Response) {
   const { id } = req.params;
   const { data } = req.body; // data is an array of permitted permission
   if (!data) return res.json(errorResponse("Missing payload"));
+
   try {
+    // First, get the account to check its role
+    const accountToUpdate = await AccountModel.findById(id);
+    if (!accountToUpdate)
+      return res.json(errorResponse("Account not found"));
+
+    // For admin accounts, always give all permissions regardless of what was requested
+    const permissionsToSet =
+      accountToUpdate.role === "admin"
+        ? permissions // Import all permissions from utils/permission
+        : data;
+
+    // Update the account with the determined permissions
     const account = await AccountModel.findByIdAndUpdate(id, {
-      permission: data,
+      permission: permissionsToSet,
     });
-    if (!account) return res.json(errorResponse("Account not found"));
+
     await ChangeHistoryModel.create({
-      objectId: account._id,
+      objectId: account?._id || null,
       action: "update",
       timestamp: Date.now(),
-      description: `Account ${account.username} permission is updated`,
+      description: `Account ${account?.username || "unknown"} permission is updated`,
       account: req.user?._id,
     });
+
     return res.json(successResponse(null, "Account permission updated"));
   } catch (error) {
     return res.json(errorResponse(`Internal server error: ${error}`));
@@ -216,9 +288,13 @@ export async function updateGithubAccessToken(req: Request, res: Response) {
         "thirdParty.$.accessToken": data,
       },
     };
-    const accountUpdated = await AccountModel.findOneAndUpdate(filter, update, {
-      new: true,
-    });
+    const accountUpdated = await AccountModel.findOneAndUpdate(
+      filter,
+      update,
+      {
+        new: true,
+      }
+    );
     await ChangeHistoryModel.create({
       objectId: account._id,
       action: "update",
@@ -226,7 +302,9 @@ export async function updateGithubAccessToken(req: Request, res: Response) {
       description: `Account ${account.username} Github token is updated`,
       account: req.user?._id,
     });
-    return res.json(successResponse(null, "Github access token updated"));
+    return res.json(
+      successResponse(null, "Github access token updated")
+    );
   } catch (error) {
     return res.json(errorResponse(`Internal server error: ${error}`));
   }
@@ -249,9 +327,13 @@ export async function updateGitlabAccessToken(req: Request, res: Response) {
         "thirdParty.$.accessToken": data,
       },
     };
-    const accountUpdated = await AccountModel.findOneAndUpdate(filter, update, {
-      new: true,
-    });
+    const accountUpdated = await AccountModel.findOneAndUpdate(
+      filter,
+      update,
+      {
+        new: true,
+      }
+    );
     await ChangeHistoryModel.create({
       objectId: account._id,
       action: "update",
@@ -259,7 +341,9 @@ export async function updateGitlabAccessToken(req: Request, res: Response) {
       description: `Account ${account.username} Gitlab token is updated`,
       account: req.user?._id,
     });
-    return res.json(successResponse(null, "Gitlab access token updated"));
+    return res.json(
+      successResponse(null, "Gitlab access token updated")
+    );
   } catch (error) {
     return res.json(errorResponse(`Internal server error: ${error}`));
   }
