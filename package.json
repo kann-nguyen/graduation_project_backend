@@ -7,7 +7,8 @@
   "scripts": {
     "dev": "nodemon ./src/server.ts",
     "test": "vitest run",
-    "build": "tsc",
+    "build": "tsc && npm run copy-files",
+    "copy-files": "mkdir -p dist/utils && cp -r src/utils/*.json dist/utils/",
     "quickbuild": "swc src -d dist -C module.type=commonjs",
     "start": "cross-env NODE_PATH=./dist node dist/server.js"
   },
