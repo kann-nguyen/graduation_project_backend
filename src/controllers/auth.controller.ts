@@ -26,6 +26,7 @@ export async function redirectToHomePage(req: Request, res: Response) {
       const project = await ProjectModel.findById(firstProject);
       if (project) {
         const urlEncodedName = encodeURIComponent(project.name);
+        // Use CLIENT_URL from environment variable instead of hardcoded value
         return res.redirect(`${process.env.CLIENT_URL}/${urlEncodedName}/`);
       }
     }
@@ -34,5 +35,6 @@ export async function redirectToHomePage(req: Request, res: Response) {
   }
   
   // Nếu không có project nào, chuyển hướng đến trang tạo project mới
+  // Use CLIENT_URL from environment variable
   return res.redirect(`${process.env.CLIENT_URL}/new-project/`);
 }

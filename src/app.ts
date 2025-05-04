@@ -37,7 +37,7 @@ app.use(
     origin: [
       "http://localhost:5173",
       "https://client-dashboard.up.railway.app",
-    ],
+      ],
     credentials: true,
   })
 );
@@ -62,7 +62,10 @@ app.use(
     proxy: true,
     cookie: {
       secure: process.env.NODE_ENV === "production",
-      sameSite: process.env.NODE_ENV === "production" ? 'none' : 'lax'
+      sameSite: process.env.NODE_ENV === "production" ? 'none' : 'lax',
+      maxAge: 24 * 60 * 60 * 1000, // 24 hours in milliseconds
+      httpOnly: true,
+      // Don't set a domain property - it will automatically use the domain of your backend
     }
   })
 );
