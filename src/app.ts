@@ -29,6 +29,8 @@ import scannerRoute from "./routes/scanner";
 import changeHistoryRoute from "./routes/changeHistory";
 envVariables.parse(process.env);
 const app = express();
+// Add this line to trust proxies (fixes the error when behind ngrok)
+app.set('trust proxy', 1);
 app.use(express.json({ limit: '10mb' }));
 app.use(
   cors({
@@ -57,6 +59,11 @@ app.use(
     secret: process.env.SESSION_SECRET,
     resave: false,
     saveUninitialized: false,
+    proxy: true,
+    cookie: {
+      secure: process.env.NODE_ENV === "production",
+      sameSite: process.env.NODE_ENV === "production" ? 'none' : 'lax'
+    }
   })
 );
 initialize(passport);

@@ -43,7 +43,10 @@ export async function safeGitlabClient(accountId: Types.ObjectId | undefined) {
   const account = await AccountModel.findById(accountId);
   const gitlab = account?.thirdParty.find((x) => x.name === "Gitlab");
   try {
-    const api = new Gitlab({ oauthToken: gitlab?.accessToken });
+    if (!gitlab?.accessToken) {
+      throw new Error("Gitlab access token is undefined");
+    }
+    const api = new Gitlab({ oauthToken: gitlab.accessToken });
     // Try any API call to see if the token is valid
     await api.Projects.all({
       owned: true,
