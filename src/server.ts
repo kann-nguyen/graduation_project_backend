@@ -11,8 +11,9 @@ if (!process.env.MONGO_URL) {
 }
 
 // MongoDB Connection
-mongoose
-  .connect(process.env.MONGO_URL)
+mongoose.connect(process.env.MONGO_URL, {
+  dbName: "base_project",
+})
   .then(() => console.log("✅ Connected to MongoDB"))
   .catch((err) => console.error("❌ MongoDB Error:", err));
 
