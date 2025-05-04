@@ -192,8 +192,8 @@ const sourceWeights: Record<VotingSource, number> = {
 //https://www.researchgate.net/publication/351864310_Towards_Practical_Cybersecurity_Mapping_of_STRIDE_and_CWE_-_a_Multi-perspective_Approach
 export async function loadCweMapping(): Promise<Record<string, ThreatType[]>> {
   try {
-    // Resolve the path to the JSON file
-    const filePath = path.resolve("src\\utils\\cweToStride.json");
+    // Use path.join with __dirname to create a cross-platform path
+    const filePath = path.join(__dirname, '..', 'utils', 'cweToStride.json');
     // Read the file contents as a UTF-8 string
     const data = await fs.readFile(filePath, "utf8");
     // Parse the JSON content into an object

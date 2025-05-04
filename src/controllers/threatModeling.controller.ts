@@ -37,8 +37,8 @@ let patternMatchingData: Record<string, string[]>;
  */
 async function loadJsonConfigs() {
   try {
-    // Define paths
-    const basePath = path.resolve(__dirname, '../utils');
+    // Define paths using path.join for cross-platform compatibility
+    const basePath = path.join(__dirname, '..', 'utils');
     
     cweMitigationsData = JSON.parse(
       await fs.readFile(path.join(basePath, 'cweMitigations.json'), 'utf8')
