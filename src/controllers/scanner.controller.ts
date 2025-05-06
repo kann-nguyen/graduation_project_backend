@@ -46,6 +46,7 @@ export async function create(req: Request, res: Response) {
     const newScanner = await ScannerModel.create({
       name: data.name,
       createdBy: req.user?.username ?? "Tan Nguyen",
+      endpoint: data.endpoint, // Save the endpoint URL
       config: data.config,
     });
 
@@ -194,6 +195,7 @@ export async function update(req: Request, res: Response) {
         name: data.name,
       },
       {
+        endpoint: data.endpoint,
         config: {
           installCommand: data.config.installCommand,
           code: data.config.code,
