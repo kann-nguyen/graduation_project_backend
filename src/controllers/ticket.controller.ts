@@ -383,10 +383,11 @@ export async function suggestAssigneeFromThreatType(projectId: string, threatTyp
     const members = await UserModel.find({ projectIn: projectId });
 
     for (const member of members) {
-
-      if (!member.skills) {
+      // Check if skills array exists and is an array before using includes()
+      if (!member.skills || !Array.isArray(member.skills)) {
         continue;
       }
+      
       if (member.skills.includes(threatType)) {
         return member;
       }
