@@ -19,8 +19,8 @@ import passport from "passport";
 const accountRoute = express.Router();
 
 accountRoute.get("/", checkAuth, get);
-accountRoute.get("/list", checkAuth, checkAdmin, getAll);
-accountRoute.get("/:id", checkAuth, checkAdmin, getById);
+accountRoute.get("/list", checkAuth, getAll);
+accountRoute.get("/:id", checkAuth, getById);
 accountRoute.post("/reg", create);
 accountRoute.patch("/thirdParty/github", checkAuth, updateGithubAccessToken);
 accountRoute.patch("/thirdParty/gitlab", checkAuth, updateGitlabAccessToken);
