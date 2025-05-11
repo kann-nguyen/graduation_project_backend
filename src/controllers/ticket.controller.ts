@@ -81,20 +81,17 @@ export async function get(req: Request, res: Response) {
  */
 export async function create(req: Request, res: Response) {
   const { data } = req.body;
-  const userId = req.user?._id;
-  try {
+  const accountId = req.user?._id;
   let user = null
-  if(!userId) {
-    user = await UserModel.findOne( {
-      account: userId,
-    });
-  } 
+  try {
+    if(accountId) {
+      user = await UserModel.findOne({
+        account: accountId,
+      });
+    } 
 
     if (!user) {
       return res.json(errorResponse("User not found"));
-    }
-    if (!user) {
-      return res.status(400).json({ success: false, message: "Assigner not found" });
     }
 
     let assigneeId = data.assignee && data.assignee.trim().length > 0 ? data.assignee : undefined;
@@ -133,9 +130,11 @@ export async function create(req: Request, res: Response) {
       description: `${user.name} created this ticket`,
     });
 
-    return res.json({ success: true, message: "Ticket created successfully" });
+    return res.json(successResponse(ticket, "Ticket created successfully"));
   } catch (error) {
-    return res.json({ success: false, message: `Internal server error: ${error}` });
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    console.error(`❌ Error creating ticket: ${errorMessage}`);
+    return res.json(errorResponse(`Internal server error: ${errorMessage}`));
   }
 }
 

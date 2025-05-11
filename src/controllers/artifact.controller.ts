@@ -8,6 +8,7 @@ import { Threat } from "../models/threat";
 import path from "path";
 import * as fs from "fs/promises";
 import { autoCreateTicketFromThreat, updateTicketStatusForThreat } from "./ticket.controller";
+import { calculateScoresFromVulnerability } from "./threat.controller";
 
 // Lấy tất cả artifacts thuộc về một project cụ thể
 export async function getAll(req: Request, res: Response) {
@@ -139,7 +140,6 @@ function createThreatFromVuln(vuln: any, artifactType: string): Partial<Threat> 
   let scoreData;
   try {
     // Import the calculation function from threatModeling.controller
-    const { calculateScoresFromVulnerability } = require('./threatModeling.controller');
     scoreData = calculateScoresFromVulnerability(vuln);
   } catch (error) {
     console.error("Error calculating initial threat scores:", error);
