@@ -18,7 +18,7 @@ import { checkAuth, checkAdmin } from "../middlewares/auth";
 import passport from "passport";
 const accountRoute = express.Router();
 
-accountRoute.get("/", checkAuth, get);
+accountRoute.get("/", get);
 accountRoute.get("/list", checkAuth, getAll);
 accountRoute.get("/:id", checkAuth, getById);
 accountRoute.post("/reg", create);
