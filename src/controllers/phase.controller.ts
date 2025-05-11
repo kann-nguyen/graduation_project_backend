@@ -20,6 +20,7 @@ import {
   scanSourceCode
 } from "./scanner.controller"
 import axios from "axios";
+import { validateArtifact } from "../utils/validateArtifact";
 
 // Lấy thông tin chi tiết của một Phase theo ID
 export async function get(req: Request, res: Response) {
@@ -192,7 +193,7 @@ export async function getTemplates(req: Request, res: Response) {
 export async function addArtifactToPhase(req: Request, res: Response) {
   const { id } = req.params;
   const { data } = req.body;
-  const { cpe, threatList} = data;
+  const { cpe, threatList } = data;
   
   // Get account ID from authenticated user
   const accountId = req.user?._id;
@@ -216,6 +217,13 @@ export async function addArtifactToPhase(req: Request, res: Response) {
     if (!data.projectId) {
       console.log("No project associated with user");
       return res.json(errorResponse("No project associated with user"));
+    }
+
+    // Validate artifact before proceeding
+    const validationResult = await validateArtifact(data);
+    if (!validationResult.valid) {
+      console.log(`[ERROR] Artifact validation failed: ${validationResult.error}`);
+      return res.json(errorResponse(validationResult.error || "Artifact validation failed"));
     }
 
     // Fetch vulnerabilities and threats before creating artifact
@@ -292,8 +300,8 @@ export async function scanArtifact(artifact: Artifact, phaseId: string) {
   artifactDoc.scannersCompleted = 0;
   artifactDoc.isScanning = true; // Set scanning flag to true
   await artifactDoc.save();
-
   try {
+
     switch (artifact.type) {
       case "docs":
         await scanDocumentInDocker(artifact);
