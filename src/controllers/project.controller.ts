@@ -163,7 +163,7 @@ export async function removeMemberFromProject(req: Request, res: Response) {
         },
       }
     );
-    return res.json(successResponse(project, "Member added to project"));
+    return res.json(successResponse(project, "Member removed to project"));
   } catch (error) {
     return res.json(errorResponse(`Internal server error: ${error}`));
   }

@@ -43,45 +43,127 @@
     "UI:N": {
       "vector": "No user interaction required (automated attack)",
       "description": "The attack can be performed without any user interaction"
+    },
+    "S:U": {
+      "vector": "Unchanged scope (impact limited to vulnerable system)",
+      "description": "The vulnerability affects only resources managed by the same security authority"
+    },
+    "S:C": {
+      "vector": "Changed scope (impact extends beyond vulnerable system)",
+      "description": "The vulnerability can affect resources beyond the security scope of the vulnerable component"
+    },
+    "C:N": {
+      "vector": "No impact on confidentiality",
+      "description": "There is no loss of confidentiality within the impacted component"
+    },
+    "C:L": {
+      "vector": "Low impact on confidentiality",
+      "description": "There is some loss of confidentiality, with access to some restricted information"
+    },
+    "C:H": {
+      "vector": "High impact on confidentiality",
+      "description": "There is total loss of confidentiality, resulting in all resources within the impacted component being disclosed"
+    },
+    "I:N": {
+      "vector": "No impact on integrity",
+      "description": "There is no loss of integrity within the impacted component"
+    },
+    "I:L": {
+      "vector": "Low impact on integrity",
+      "description": "Modification of data is possible, but the attacker does not have control over what can be modified"
+    },
+    "I:H": {
+      "vector": "High impact on integrity",
+      "description": "There is total loss of integrity, with the attacker able to modify any files or information"
+    },
+    "A:N": {
+      "vector": "No impact on availability",
+      "description": "There is no impact to availability within the impacted component"
+    },
+    "A:L": {
+      "vector": "Low impact on availability",
+      "description": "Performance is reduced or there are interruptions in resource availability, but not significantly"
+    },
+    "A:H": {
+      "vector": "High impact on availability",
+      "description": "There is total loss of availability, resulting in the attacker being able to fully deny access to resources"
     }
   },
   "securityPrinciples": {
-    "AV:N": "Network-level security controls",
-    "AV:A": "Network segmentation",
-    "AV:L": "Physical security measures",
-    "AV:P": "Physical access restrictions",
+    "AV:N": "Network-level security controls (firewalls, WAF, IPS)",
+    "AV:A": "Network segmentation and VLAN isolation",
+    "AV:L": "Physical security measures and host-based controls",
+    "AV:P": "Physical access restrictions and tamper-evident mechanisms",
     "AC:L": "Defense in depth (multiple protective layers)",
-    "PR:N": "Strong authentication controls",
-    "PR:L": "Principle of least privilege",
-    "UI:R": "Security awareness training",
-    "C:H": "Data encryption (at rest and in transit)",
-    "I:H": "Data integrity verification mechanisms",
-    "A:H": "Service redundancy and high availability design"
+    "AC:H": "Attack surface reduction and security hardening",
+    "PR:N": "Strong authentication controls and zero trust architecture",
+    "PR:L": "Principle of least privilege and role-based access control",
+    "PR:H": "Privileged access management (PAM) and just-in-time access",
+    "UI:R": "Security awareness training and anti-phishing measures",
+    "UI:N": "Continuous vulnerability scanning and patch management",
+    "S:U": "Component isolation and secure development practices",
+    "S:C": "Containerization and strict trust boundaries",
+    "C:L": "Data classification and encryption of sensitive data",
+    "C:H": "Data encryption (at rest and in transit) and secure key management",
+    "I:L": "Input validation and file integrity monitoring",
+    "I:H": "Data integrity verification mechanisms and digital signatures",
+    "A:L": "Performance monitoring and resource throttling",
+    "A:H": "Service redundancy, high availability design, and DDoS protection"
   },
   "threatSpecificPrinciples": {
     "Spoofing": {
-      "conditions": ["PR:N", "PR:L", "C:H"],
-      "principles": ["Multi-factor authentication (MFA)"]
+      "conditions": ["PR:N", "PR:L", "C:H", "I:H"],
+      "principles": [
+        "Multi-factor authentication (MFA)",
+        "Strong identity verification processes",
+        "Anti-spoofing mechanisms (SPF, DKIM, DMARC)",
+        "Secure credential storage with appropriate hashing"
+      ]
     },
     "Tampering": {
-      "conditions": ["I:H"],
-      "principles": ["Digital signatures for critical data"]
+      "conditions": ["I:L", "I:H", "AC:L"],
+      "principles": [
+        "Digital signatures for critical data",
+        "Input validation and sanitization",
+        "Code signing for software integrity",
+        "Immutable logging and audit trails"
+      ]
     },
     "Repudiation": {
       "conditions": ["I:H", "PR:N", "PR:L"],
-      "principles": ["Secure audit logging with integrity protection"]
+      "principles": [
+        "Secure audit logging with integrity protection",
+        "Digital signatures for non-repudiation",
+        "Centralized logging infrastructure",
+        "Timestamp validation and secure clock synchronization"
+      ]
     },
     "Information Disclosure": {
-      "conditions": ["C:H"],
-      "principles": ["Data classification and handling procedures"]
+      "conditions": ["C:L", "C:H", "AV:N"],
+      "principles": [
+        "Data classification and handling procedures",
+        "Transport layer security and end-to-end encryption",
+        "Data loss prevention (DLP) systems",
+        "Secure coding practices to prevent information leakage"
+      ]
     },
     "Denial of Service": {
-      "conditions": ["A:H"],
-      "principles": ["Load balancing and autoscaling infrastructure"]
+      "conditions": ["A:L", "A:H", "AV:N"],
+      "principles": [
+        "Load balancing and autoscaling infrastructure",
+        "Resource quota enforcement",
+        "Rate limiting and traffic throttling",
+        "DDoS protection services"
+      ]
     },
     "Elevation of Privilege": {
-      "conditions": ["PR:N", "PR:L", "I:H"],
-      "principles": ["Granular access control policies"]
+      "conditions": ["PR:N", "PR:L", "I:H", "AC:L"],
+      "principles": [
+        "Granular access control policies",
+        "Security boundary enforcement",
+        "Regular privilege auditing",
+        "Principle of least privilege implementation"
+      ]
     }
   }
 }
