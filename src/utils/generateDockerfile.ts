@@ -10,8 +10,14 @@ export async function generateDockerfile(config: Configuration) {
   // Replace install command
   dockerfile = dockerfile.replace(/<install_command>/g, installCommand);
   // Trim all the newlines in the code
-  const trimmedCode = code.replace(/\n/g, "");
-  dockerfile = dockerfile.replace(/<code_content>/g, trimmedCode);
+  const escapedCode = code
+    .replace(/\\/g, '\\\\')     // Escape backslashes first
+    .replace(/'/g, "\\'")       // Escape single quotes
+    .replace(/"/g, '\\"')       // Escape double quotes
+    .replace(/`/g, '\\`')       // Escape backticks
+    .replace(/\$/g, '\\$')      // Escape dollar signs for template literals
+    .replace(/\n/g, '\\n');     // Replace newlines with \n
+  dockerfile = dockerfile.replace(/<code_content>/g, escapedCode);
   return dockerfile;
 }
 const vulnInterface = `interface Vulnerability {
