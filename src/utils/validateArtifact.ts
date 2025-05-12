@@ -166,28 +166,24 @@ export async function validateArtifact(data: any): Promise<{ valid: boolean; err
                 }
                 
                 // Validate that the Docker image exists (attempt to pull it)
-                try {
-                    console.log(`[INFO] Validating Docker image existence: ${pullImage}`);
-                    // Try to pull the image to check if it exists
-                    await execPromise(`docker pull ${pullImage} --quiet`);
-                    console.log(`[INFO] Docker image validation successful: ${pullImage}`);
+                // try {
+                //     // Try to pull the image to check if it exists
+                //     await execPromise(`docker pull ${pullImage} --quiet`);
                     
-                    // Clean up the pulled image to save disk space
-                    try {
-                        console.log(`[INFO] Removing Docker image after validation: ${pullImage}`);
-                        await execPromise(`docker rmi ${pullImage} --force`);
-                        console.log(`[INFO] Successfully removed Docker image: ${pullImage}`);
-                    } catch (rmError: any) {
-                        // Log the error but don't fail validation if cleanup fails
-                        console.warn(`[WARN] Failed to remove Docker image after validation: ${rmError.message || 'Unknown error'}`);
-                    }
-                } catch (error: any) {
-                    console.error("[ERROR] Docker image validation failed:", error);
-                    return {
-                        valid: false,
-                        error: `Failed to validate Docker image: ${error.message || 'Unknown error'}. Make sure the image exists and is accessible.`
-                    };
-                }
+                //     // Clean up the pulled image to save disk space
+                //     try {
+                //         await execPromise(`docker rmi ${pullImage} --force`);
+                //     } catch (rmError: any) {
+                //         // Log the error but don't fail validation if cleanup fails
+                //         console.warn(`[WARN] Failed to remove Docker image after validation: ${rmError.message || 'Unknown error'}`);
+                //     }
+                // } catch (error: any) {
+                //     console.error("[ERROR] Docker image validation failed:", error);
+                //     return {
+                //         valid: false,
+                //         error: `Failed to validate Docker image: ${error.message || 'Unknown error'}. Make sure the image exists and is accessible.`
+                //     };
+                // }
                 break;
 
             case "source code":
