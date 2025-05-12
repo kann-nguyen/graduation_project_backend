@@ -20,6 +20,8 @@ import {
   scanSourceCode
 } from "./scanner.controller"
 import axios from "axios";
+import { validateArtifact } from "../utils/validateArtifact";
+import scanner from "../routes/scanner";
 
 // Lấy thông tin chi tiết của một Phase theo ID
 export async function get(req: Request, res: Response) {
@@ -192,7 +194,7 @@ export async function getTemplates(req: Request, res: Response) {
 export async function addArtifactToPhase(req: Request, res: Response) {
   const { id } = req.params;
   const { data } = req.body;
-  const { cpe, threatList} = data;
+  const { cpe, threatList } = data;
   
   // Get account ID from authenticated user
   const accountId = req.user?._id;
@@ -216,6 +218,13 @@ export async function addArtifactToPhase(req: Request, res: Response) {
     if (!data.projectId) {
       console.log("No project associated with user");
       return res.json(errorResponse("No project associated with user"));
+    }
+
+    // Validate artifact before proceeding
+    const validationResult = await validateArtifact(data);
+    if (!validationResult.valid) {
+      console.log(`[ERROR] Artifact validation failed: ${validationResult.error}`);
+      return res.json(errorResponse(validationResult.error || "Artifact validation failed"));
     }
 
     // Fetch vulnerabilities and threats before creating artifact
@@ -275,25 +284,30 @@ export async function addArtifactToPhase(req: Request, res: Response) {
 export async function scanArtifact(artifact: Artifact, phaseId: string) {
   console.log("[INFO] Scanning artifact", artifact.name);
 
-  const phase = await PhaseModel.findById(phaseId).populate("scanners");
+  // First, get the phase to retrieve all scanner IDs
+  const phase = await PhaseModel.findById(phaseId);
   if (!phase) {
     console.error("[ERROR] Phase not found for artifact", artifact.name);
     return;
   }
-  const scanners = phase.scanners || [];
+  
+  // Get scanner IDs from the phase
+  const scannerIds = phase.scanners || [];
+  console.log(`[INFO] Found ${scannerIds.length} scanner references in phase`);
 
-  const artifactDoc = await ArtifactModel.findById(artifact._id);
-  if (!artifactDoc) {
+  const artifactImage = await ArtifactModel.findById(artifact._id);
+  if (!artifactImage) {
     console.error("[ERROR] Artifact not found in the database");
     return;
   }
 
-  artifactDoc.totalScanners = Math.max(scanners.length, 1);
-  artifactDoc.scannersCompleted = 0;
-  artifactDoc.isScanning = true; // Set scanning flag to true
-  await artifactDoc.save();
+  artifactImage.totalScanners = Math.max(scannerIds.length, 1);
+  artifactImage.scannersCompleted = 0;
+  artifactImage.isScanning = true; // Set scanning flag to true
+  await artifactImage.save();
 
   try {
+    // Fall back to default scanner behavior if no custom scanners were successful
     switch (artifact.type) {
       case "docs":
         await scanDocumentInDocker(artifact);
@@ -302,22 +316,67 @@ export async function scanArtifact(artifact: Artifact, phaseId: string) {
         await scanSourceCode(artifact);
         break;
       case "image":
-        let url = `${process.env.IMAGE_SCANNING_URL}/scan`;
+        // If we have scanners in the phase, try to use them first
+        if (scannerIds.length > 0) {
+          console.log(`[INFO] Found ${scannerIds.length} scanner IDs for phase. Will attempt to use them for image scanning.`);
+          
+          // Create a custom HTTPS agent that ignores SSL certificate errors for development
+          const https = require('https');
+          const httpsAgent = new https.Agent({
+            rejectUnauthorized: false
+          });
+          
+          // Fetch and use each scanner by ID
+          for (const scannerId of scannerIds) {
+            // Get the full scanner document by ID
+            const scanner = await ScannerModel.findById(scannerId);
+            
+            if (!scanner) {
+              console.log(`[WARNING] Scanner with ID ${scannerId} not found in database`);
+              continue;
+            }
+            
+            // Now we have the full scanner document with all properties
+            if (scanner.endpoint) {
+              try {
+                console.log(`[INFO] Calling scanner ${scanner.name} at endpoint ${scanner.endpoint}`);
+                // Make the API call to the scanner with a timeout
+                await axios.post(`${scanner.endpoint}`,{
+                  params: {
+                    name: `${artifact.name}:${artifact.version}`,
+                  },
+                  httpsAgent
+                });
+                console.log(`Image scanning triggered for artifact: ${artifact.name}`);
+              } catch (error) {
+                if (error instanceof Error) {
+                  console.error(`[ERROR] Failed to call scanner ${scanner.name}:`, error.message);
+                } else {
+                  console.error(`[ERROR] Failed to call scanner ${scanner.name}:`, error);
+                }
+              }
+            } else {
+              console.log(`[WARNING] Scanner ${scanner.name} has no endpoint defined`);
+            }
+          }
+        } else {
+          let url = `${process.env.IMAGE_SCANNING_URL}/scan`;
         
-        // Create a custom HTTPS agent that ignores SSL certificate errors
-        // This is useful for development/testing with ngrok
-        const https = require('https');
-        const httpsAgent = new https.Agent({
-          rejectUnauthorized: false // Ignore SSL certificate verification
-        });
-        
-        await axios.get(url, {
-          params: {
-            name: `${artifact.name}:${artifact.version}`,
-          },
-          httpsAgent // Use the custom agent to bypass SSL verification
-        });
-        console.log(`Image scanning triggered for artifact: ${artifact.name}`);
+          // Create a custom HTTPS agent that ignores SSL certificate errors
+          // This is useful for development/testing with ngrok
+          const https = require('https');
+          const httpsAgent = new https.Agent({
+            rejectUnauthorized: false // Ignore SSL certificate verification
+          });
+          
+          await axios.get(url, {
+            params: {
+              name: `${artifact.name}:${artifact.version}`,
+            },
+            httpsAgent // Use the custom agent to bypass SSL verification
+          });
+          console.log(`Image scanning triggered for artifact: ${artifact.name}`);
+        }
         break;
       default:
         console.log("[INFO] Unknown artifact type, assigning default state");
@@ -325,9 +384,14 @@ export async function scanArtifact(artifact: Artifact, phaseId: string) {
     }
   } catch (error) {
     // In case of error, reset scanning state
-    artifactDoc.isScanning = false;
-    await artifactDoc.save();
+    artifactImage.isScanning = false;
+    await artifactImage.save();
     console.error("[ERROR] Scanning failed:", error);
+  } finally {
+    // Set scanning flag to false when all scanning is done
+    artifactImage.isScanning = false;
+    await artifactImage.save();
+    console.log(`[INFO] Scanning completed for artifact: ${artifact.name}`);
   }
 }
 

@@ -1,14 +1,14 @@
 import { isDocumentArray } from "@typegoose/typegoose";
 import { Request, Response } from "express";
-import { ArtifactModel, ChangeHistoryModel, ProjectModel, ThreatModel, TicketModel } from "../models/models";
+import { ArtifactModel, ProjectModel, ThreatModel } from "../models/models";
 import { errorResponse, successResponse } from "../utils/responseFormat";
-import { Artifact } from "../models/artifact";
 import { Vulnerability } from "../models/vulnerability";
 import { Threat } from "../models/threat";
 import path from "path";
 import * as fs from "fs/promises";
 import { autoCreateTicketFromThreat, updateTicketStatusForThreat } from "./ticket.controller";
 import { calculateScoresFromVulnerability } from "./threat.controller";
+import { validateArtifact } from "../utils/validateArtifact";
 
 // Lấy tất cả artifacts thuộc về một project cụ thể
 export async function getAll(req: Request, res: Response) {
@@ -24,19 +24,19 @@ export async function getAll(req: Request, res: Response) {
         select: "+isScanning" // Explicitly include isScanning field
       },
     });
-    
+
     // Nếu không tìm thấy project, trả về lỗi
     if (!project) {
       return res.json(errorResponse("Project not found"));
     }
-    
+
     // Kiểm tra nếu phaseList là một mảng tài liệu hợp lệ
     if (isDocumentArray(project.phaseList)) {
       // Lấy tất cả artifacts từ các phase
       const artifacts = project.phaseList
         .map((phase) => phase.artifacts)
         .flat();
-      
+
       // Trả về danh sách artifacts kèm theo thông báo thành công
       return res.json(
         successResponse(
@@ -57,7 +57,7 @@ export async function get(req: Request, res: Response) {
   try {
     // Tìm artifact theo ID
     const artifact = await ArtifactModel.findById(id).select("+isScanning");
-    
+
     // Trả về artifact nếu tìm thấy
     return res.json(successResponse(artifact, "Artifact fetched successfully"));
   } catch (error) {
@@ -71,10 +71,18 @@ export async function update(req: Request, res: Response) {
   const { id } = req.params;
   const { data } = req.body;
   const { threatList } = data; // Danh sách tên các threat
+
+  // Validate artifact before proceeding
+  const validationResult = await validateArtifact(data);
+  if (!validationResult.valid) {
+    console.log(`[ERROR] Artifact validation failed: ${validationResult.error}`);
+    return res.json(errorResponse(validationResult.error || "Artifact validation failed"));
+  }
   try {
+
     // Tìm danh sách các threat trong database dựa trên tên
     const threats = await ThreatModel.find({ name: { $in: threatList } });
-    
+
     // Cập nhật artifact với dữ liệu mới và danh sách threats
     const artifact = await ArtifactModel.findByIdAndUpdate(
       id,
@@ -87,7 +95,7 @@ export async function update(req: Request, res: Response) {
         select: "+isScanning" // Include isScanning field in response
       }
     );
-    
+
     // Trả về artifact sau khi cập nhật thành công
     return res.json(successResponse(artifact, "Artifact updated successfully"));
   } catch (error) {
@@ -106,8 +114,8 @@ export async function updateRateScan(req: Request, res: Response) {
   if (!user || user.role !== "project_manager") {
     return res.json(errorResponse("You are not authorized to update this artifact"));
   }
-  
-  try {    
+
+  try {
     if (rate < 0 || rate > 100) {
       return res.json(errorResponse("Rate must be between 0 and 100"));
     }
@@ -122,7 +130,7 @@ export async function updateRateScan(req: Request, res: Response) {
         new: true, // Trả về artifact sau khi đã cập nhật
       }
     );
-    
+
     // Trả về artifact sau khi cập nhật thành công
     return res.json(successResponse(artifact, "Rate re-scan updated successfully"));
   } catch (error) {
@@ -135,7 +143,7 @@ export async function updateRateScan(req: Request, res: Response) {
 function createThreatFromVuln(vuln: any, artifactType: string): Partial<Threat> {
   const votes = getVotes(vuln);
   const threatType = resolveThreatType(votes, artifactType);
-  
+
   // Calculate initial scores based on vulnerability data
   let scoreData;
   try {
@@ -155,7 +163,7 @@ function createThreatFromVuln(vuln: any, artifactType: string): Partial<Threat> 
       }
     };
   }
-  
+
   return {
     name: vuln.cveId,
     description: vuln.description ?? "Have no des",
@@ -205,7 +213,7 @@ export async function loadCweMapping(): Promise<Record<string, ThreatType[]>> {
   }
 }
 
-let cweToStrideMap:any;
+let cweToStrideMap: any;
 
 (async () => {
   cweToStrideMap = await loadCweMapping();
@@ -239,7 +247,7 @@ export function getVotes(vuln: Vulnerability): Vote[] {
   // Search for characteristic keywords in vulnerability description
   // Medium weight (2) because it's based on semantic analysis
   const desc = vuln.description?.toLowerCase() || "";
-  
+
   // Keyword patterns for each threat type
   const keywordPatterns = {
     "Elevation of Privilege": /\b(privilege|permission|access control|unauthorized|admin|root|sudo)\b/,
@@ -315,14 +323,14 @@ export function resolveThreatType(votes: Vote[], artifactType: string): ThreatTy
 // Hàm gộp danh sách lỗ hổng và loại bỏ trùng lặp
 function mergeVulnerabilities(existingVulns: any[], newVulns: any[]): any[] {
   const merged = [...existingVulns];
-  
+
   for (const newVuln of newVulns) {
     const exists = merged.some(v => v.cveId === newVuln.cveId);
     if (!exists) {
       merged.push(newVuln);
     }
   }
-  
+
   return merged;
 }
 
@@ -337,10 +345,10 @@ export async function processScannerResult(artifactId: string, vulns: any): Prom
 
     // Initialize or update tempVuls
     artifact.tempVuls = mergeVulnerabilities(artifact.tempVuls || [], vulns);
-    
+
     // Increment completed scanners count
     artifact.scannersCompleted = (artifact.scannersCompleted || 0) + 1;
-    
+
     // Check if all scanners have completed
     if (artifact.scannersCompleted >= (artifact.totalScanners ?? 1)) {
       await updateArtifactAfterScan(artifact);
@@ -349,7 +357,7 @@ export async function processScannerResult(artifactId: string, vulns: any): Prom
       artifact.totalScanners = 0;
       artifact.isScanning = false;
     }
-    
+
     await artifact.save();
 
   } catch (error) {
@@ -383,7 +391,7 @@ async function processExistingThreats(artifact: any): Promise<void> {
   for (const threat of artifact.threatList) {
     // Kiểm tra có tồn tại vulnerability tương ứng trong tempVuls
     const existsInTemp = artifact.tempVuls?.some((vuln: any) => threatMatchesVul(threat, vuln));
-    
+
     if (existsInTemp) {
       // Cập nhật trạng thái ticket của threat thành "Processing"
       await updateTicketStatusForThreat(threat._id, false);
