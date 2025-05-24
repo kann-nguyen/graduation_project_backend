@@ -27,6 +27,11 @@ import webhookRoute from "./routes/webhook";
 import workflowRoute from "./routes/workflow";
 import scannerRoute from "./routes/scanner";
 import changeHistoryRoute from "./routes/changeHistory";
+import { migrateArtifactsState } from "./controllers/artifact.controller";
+
+// Run migrations
+migrateArtifactsState();
+
 envVariables.parse(process.env);
 const app = express();
 app.use(express.json({ limit: '10mb' }));

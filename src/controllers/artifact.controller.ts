@@ -13,15 +13,14 @@ import { validateArtifact } from "../utils/validateArtifact";
 // Lấy tất cả artifacts thuộc về một project cụ thể
 export async function getAll(req: Request, res: Response) {
   const { projectName } = req.query;
-  try {
-    // Tìm project theo tên và populate danh sách phase cùng artifacts của nó
+  try {    // Tìm project theo tên và populate danh sách phase cùng artifacts của nó
     const project = await ProjectModel.findOne({
       name: projectName,
     }).populate({
       path: "phaseList",
       populate: {
         path: "artifacts",
-        select: "+isScanning" // Explicitly include isScanning field
+        select: "+isScanning state" // Explicitly include isScanning and state fields
       },
     });
 
@@ -31,8 +30,7 @@ export async function getAll(req: Request, res: Response) {
     }
 
     // Kiểm tra nếu phaseList là một mảng tài liệu hợp lệ
-    if (isDocumentArray(project.phaseList)) {
-      // Lấy tất cả artifacts từ các phase
+    if (isDocumentArray(project.phaseList)) {      // Lấy tất cả artifacts từ các phase
       const artifacts = project.phaseList
         .map((phase) => phase.artifacts)
         .flat();
@@ -56,7 +54,7 @@ export async function get(req: Request, res: Response) {
   const { id } = req.params;
   try {
     // Tìm artifact theo ID
-    const artifact = await ArtifactModel.findById(id).select("+isScanning");
+    const artifact = await ArtifactModel.findById(id).select("+isScanning state");
 
     // Trả về artifact nếu tìm thấy
     return res.json(successResponse(artifact, "Artifact fetched successfully"));
@@ -74,10 +72,15 @@ export async function update(req: Request, res: Response) {
 
   // Validate artifact before proceeding
   const validationResult = await validateArtifact(data);
+  
+  // Set the state based on validation result
+  data.state = validationResult.valid ? "valid" : "invalid";
+  
+  // Log the validation result but proceed with artifact update
   if (!validationResult.valid) {
-    console.log(`[ERROR] Artifact validation failed: ${validationResult.error}`);
-    return res.json(errorResponse(validationResult.error || "Artifact validation failed"));
+    console.log(`[INFO] Artifact validation failed: ${validationResult.error}. Updating with state = "invalid"`);
   }
+
   try {
 
     // Tìm danh sách các threat trong database dựa trên tên
@@ -456,6 +459,36 @@ export async function updateArtifactAfterScan(artifact: any): Promise<void> {
     throw error;
   }
 }
+
+// Migrate artifacts to ensure they all have a state field
+export async function migrateArtifactsState() {
+  try {
+    console.log("[INFO] Starting artifact state migration check");
+    
+    // Find all artifacts without a state field
+    const artifacts = await ArtifactModel.find({ state: { $exists: false } });
+    
+    if (artifacts.length === 0) {
+      console.log("[INFO] No artifacts need state migration");
+      return;
+    }
+    
+    console.log(`[INFO] Found ${artifacts.length} artifacts without state field, applying migration`);
+    
+    // Update all artifacts to set default state to valid
+    const updateResult = await ArtifactModel.updateMany(
+      { state: { $exists: false } },
+      { $set: { state: "valid" } }
+    );
+    
+    console.log(`[INFO] Migration complete: ${updateResult.modifiedCount} artifacts updated`);
+  } catch (error) {
+    console.error("[ERROR] Failed to migrate artifact states:", error);
+  }
+}
+
+// Run migration on startup
+migrateArtifactsState();
 
 
 

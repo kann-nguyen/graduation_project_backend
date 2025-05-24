@@ -26,14 +26,14 @@ import scanner from "../routes/scanner";
 // Lấy thông tin chi tiết của một Phase theo ID
 export async function get(req: Request, res: Response) {
   const { id } = req.params; // Lấy ID của Phase từ request params
-  try {
-    // Tìm Phase theo ID và populate dữ liệu liên quan
+  try {    // Tìm Phase theo ID và populate dữ liệu liên quan
     const phase = await PhaseModel.findById(id).populate([
       {
         path: "tasks", // Lấy danh sách tasks liên quan đến Phase
       },
       {
         path: "artifacts", // Lấy danh sách artifacts của Phase
+        select: "name type url version threatList vulnerabilityList cpe isScanning state", // Explicitly include state field
         populate: {
           path: "threatList vulnerabilityList", // Populate danh sách threats và vulnerabilities
         },
@@ -213,18 +213,21 @@ export async function addArtifactToPhase(req: Request, res: Response) {
     }
     
     data.projectId = user.projectIn[0]?.toString() || "";
-    
-    // Check if projectId exists
+      // Check if projectId exists
     if (!data.projectId) {
       console.log("No project associated with user");
       return res.json(errorResponse("No project associated with user"));
     }
-
+    
     // Validate artifact before proceeding
     const validationResult = await validateArtifact(data);
+    
+    // Set the state based on validation result
+    data.state = validationResult.valid ? "valid" : "invalid";
+    
+    // Log the validation result but proceed with artifact creation
     if (!validationResult.valid) {
-      console.log(`[ERROR] Artifact validation failed: ${validationResult.error}`);
-      return res.json(errorResponse(validationResult.error || "Artifact validation failed"));
+      console.log(`[INFO] Artifact validation failed: ${validationResult.error}. Creating with state = "invalid"`);
     }
 
     // Fetch vulnerabilities and threats before creating artifact
@@ -245,10 +248,7 @@ export async function addArtifactToPhase(req: Request, res: Response) {
       } catch (error) {
         data.threatList = [];
       }
-    }
-
-    try {
-      data.state = "S1"; // ✅ Gán state ban đầu là S1
+    }    try {
       const artifact = await ArtifactModel.create(data);
 
       // ✅ Thêm artifact vào phase ngay lập tức
@@ -256,19 +256,21 @@ export async function addArtifactToPhase(req: Request, res: Response) {
         id,
         { $addToSet: { artifacts: artifact._id } },
         { new: true }
-      );
-
-      // ✅ Trả về response ngay, để user thấy artifact trong phase
+      );      // ✅ Trả về response ngay, để user thấy artifact trong phase
       res.json(successResponse(null, "Artifact added to phase and scanning started in background"));
 
-      // ✅ Bắt đầu scan ở background
-      setImmediate(async () => {
-        try {
-          await scanArtifact(artifact, id);
-        } catch (error) {
-          console.error("[ERROR] Scanning failed:", error);
-        }
-      });
+      // ✅ Bắt đầu scan ở background only if artifact is valid
+      if (artifact.state === "valid") {
+        setImmediate(async () => {
+          try {
+            await scanArtifact(artifact, id);
+          } catch (error) {
+            console.error("[ERROR] Scanning failed:", error);
+          }
+        });
+      } else {
+        console.log(`[INFO] Skipping scan for invalid artifact: ${artifact.name}`);
+      }
 
     } catch (error) {
       console.error("[ERROR] Internal server error", error);
@@ -298,6 +300,12 @@ export async function scanArtifact(artifact: Artifact, phaseId: string) {
   const artifactImage = await ArtifactModel.findById(artifact._id);
   if (!artifactImage) {
     console.error("[ERROR] Artifact not found in the database");
+    return;
+  }
+  
+  // Skip scanning if the artifact is invalid
+  if (artifactImage.state === "invalid") {
+    console.log(`[INFO] Skipping scanning for invalid artifact: ${artifact.name}`);
     return;
   }
 
