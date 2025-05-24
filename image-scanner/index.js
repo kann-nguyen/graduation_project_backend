@@ -4,7 +4,6 @@ import { randomUUID } from "crypto";
 import "dotenv/config";
 import { mkdir, readFile, unlink } from "fs/promises";
 import axios from "axios";
-import path from "path";
 
 const app = express();
 const port = 3000;
@@ -287,27 +286,86 @@ function getVulnerabilityStats(vulnerabilities) {
     cwesPercentage: total > 0 ? Math.round((withCwes / total) * 100) : 0,
     completePercentage: total > 0 ? Math.round((complete / total) * 100) : 0
   };
-  
-  log(`----- VULNERABILITY DATA STATISTICS -----`, "INFO");
-  log(`Total vulnerabilities found: ${stats.totalVulnerabilities}`, "INFO");
-  log(`Vulnerabilities with CVSS score: ${stats.withScore} (${stats.scorePercentage}%)`, "INFO");
-  log(`Vulnerabilities with CVSS vector: ${stats.withVector} (${stats.vectorPercentage}%)`, "INFO");
-  log(`Vulnerabilities with CWEs: ${stats.withCwes} (${stats.cwesPercentage}%)`, "INFO"); 
-  log(`Vulnerabilities with complete data: ${stats.complete} (${stats.completePercentage}%)`, "INFO");
-  log(`-----------------------------------------`, "INFO");
-  
-  return stats;
+    return stats;
 }
 
+// Extract basic vulnerability data from Grype scan and enrich with external API data if needed
+async function processVulnerability(vulnerability) {
+  const { id, severity, description } = vulnerability;
+  
+  // Try to get data from Grype first
+  let cvssScore = null;
+  let cvssVector = null;
+  let cwes = [];
+
+  if (vulnerability.cvss && vulnerability.cvss.length > 0) {
+    const latestCvss = vulnerability.cvss[vulnerability.cvss.length - 1];
+    cvssScore = latestCvss?.metrics?.baseScore;
+    cvssVector = latestCvss?.vector;
+  }
+  
+  // Extract CWEs from Grype if available
+  if (vulnerability.cwe && Array.isArray(vulnerability.cwe)) {
+    cwes = [...vulnerability.cwe];
+  } else if (vulnerability.related && Array.isArray(vulnerability.related.cwes)) {
+    cwes = [...vulnerability.related.cwes];
+  } else if (vulnerability.dataSource && vulnerability.dataSource.cwe) {
+    if (Array.isArray(vulnerability.dataSource.cwe)) {
+      cwes = [...vulnerability.dataSource.cwe];
+    } else {
+      cwes = [vulnerability.dataSource.cwe];
+    }
+  }
+  
+  // If we're missing any data, try to get it from external APIs
+  if (!cvssScore || !cvssVector || cwes.length === 0) {
+    const externalData = await CveInfoService.getCveInfo(id);
+    if (externalData) {
+      // Only use external data if we don't have it from Grype
+      if (!cvssScore && externalData.score) cvssScore = externalData.score;
+      if (!cvssVector && externalData.cvssVector) cvssVector = externalData.cvssVector;
+      if (cwes.length === 0 && externalData.cwes) cwes = externalData.cwes;
+    }
+  }
+  
+  return {
+    cveId: id,
+    severity,
+    description,
+    score: cvssScore,
+    cvssVector: cvssVector,
+    cwes: cwes.length > 0 ? cwes : null,
+  };
+}
+
+// Determine security state based on vulnerability severity levels
+function determineSecurityState(vulnerabilities) {
+  const criticals = vulnerabilities.filter((v) => v.severity === "Critical");
+  const highs = vulnerabilities.filter((v) => v.severity === "High");
+
+  let securityState = "S6";
+  if (criticals.length === 0 && highs.length === 0) {
+    securityState = "S3";
+  } else if (criticals.length > 0) {
+    securityState = "S5.2";
+  } else if (highs.length > 0) {
+    securityState = "S5.1*";
+  }
+  
+  return securityState;
+}
+
+// Main function to process an image scan
 async function processImageScan(name) {
   const uuid = randomUUID();
   log(`Received scan request for image: ${name} (UUID: ${uuid})`);
 
   try {
+    // Create scan directory and setup output path
     await mkdir("./scan-log", { recursive: true });
     const outputPath = `./scan-log/${uuid}.json`;
     
-    // Run Grype scan
+    // Step 1: Run the scan
     await new Promise((resolve, reject) => {
       const command = spawn("grype", [
         name,
@@ -336,82 +394,26 @@ async function processImageScan(name) {
       });
     });
 
-    // Process scan results
+    // Step 2: Read and parse scan results
     const data = await readFile(outputPath, "utf8");
     const output = JSON.parse(data);
     const { matches } = output;
 
-    // Process vulnerabilities with external API enrichment
-    const vulnerabilities = await Promise.all(matches.map(async (match) => {
-      const { vulnerability } = match;
-      const { id, severity, description } = vulnerability;
-      
-      // Try to get data from Grype first
-      let cvssScore = null;
-      let cvssVector = null;
-      let cwes = [];
+    // Step 3: Process and enrich vulnerabilities
+    const vulnerabilities = await Promise.all(
+      matches.map(match => processVulnerability(match.vulnerability))
+    );
 
-      if (vulnerability.cvss && vulnerability.cvss.length > 0) {
-        const latestCvss = vulnerability.cvss[vulnerability.cvss.length - 1];
-        cvssScore = latestCvss?.metrics?.baseScore;
-        cvssVector = latestCvss?.vector;
-      }
-      
-      // Extract CWEs from Grype if available
-      if (vulnerability.cwe && Array.isArray(vulnerability.cwe)) {
-        cwes = [...vulnerability.cwe];
-      } else if (vulnerability.related && Array.isArray(vulnerability.related.cwes)) {
-        cwes = [...vulnerability.related.cwes];
-      } else if (vulnerability.dataSource && vulnerability.dataSource.cwe) {
-        if (Array.isArray(vulnerability.dataSource.cwe)) {
-          cwes = [...vulnerability.dataSource.cwe];
-        } else {
-          cwes = [vulnerability.dataSource.cwe];
-        }
-      }
-      
-      // If we're missing any data, try to get it from external APIs
-      if (!cvssScore || !cvssVector || cwes.length === 0) {
-        const externalData = await CveInfoService.getCveInfo(id);
-        if (externalData) {
-          // Only use external data if we don't have it from Grype
-          if (!cvssScore && externalData.score) cvssScore = externalData.score;
-          if (!cvssVector && externalData.cvssVector) cvssVector = externalData.cvssVector;
-          if (cwes.length === 0 && externalData.cwes) cwes = externalData.cwes;
-        }
-      }
-      
-      return {
-        cveId: id,
-        severity,
-        description,
-        score: cvssScore,
-        cvssVector: cvssVector,
-        cwes: cwes.length > 0 ? cwes : null,
-      };
-    }));
-
-    // Generate statistics about the vulnerability data completeness
-    const stats = getVulnerabilityStats(vulnerabilities);
+    // Step 4: Generate statistics (for logging purposes)
+    getVulnerabilityStats(vulnerabilities);
     
-    // Determine security state
-    const criticals = vulnerabilities.filter((v) => v.severity === "Critical");
-    const highs = vulnerabilities.filter((v) => v.severity === "High");
+    // Step 5: Determine security state
+    const securityState = determineSecurityState(vulnerabilities);
 
-    let securityState = "S6";
-    if (criticals.length === 0 && highs.length === 0) {
-      securityState = "S3";
-    } else if (criticals.length > 0) {
-      securityState = "S5.2";
-    } else if (highs.length > 0) {
-      securityState = "S5.1*";
-    }
-
-    console.log(`[+] Security state for image '${name}': ${securityState}`);
-
+    // Clean up
     await unlink(outputPath);
-    log(`Deleted scan log: ${outputPath}`);
 
+    // Step 6: Send results
     const payload = {
       eventCode: "IMAGE_SCAN_COMPLETE",
       imageName: name,
@@ -419,8 +421,8 @@ async function processImageScan(name) {
       data: vulnerabilities
     };
 
-    await axios.post(`${process.env.API_URL}/webhook/image`, payload);
     log(`Sent scan results to ${process.env.API_URL}/webhook/image`);
+    await axios.post(`${process.env.API_URL}/webhook/image`, payload);
 
     return { success: true, requestId: uuid };
   } catch (error) {
@@ -433,7 +435,6 @@ app.get("/scan", async (req, res) => {
   try {
     const { name } = req.query;
     if (!name) {
-      log("Missing image name in query", "WARN");
       return res.status(400).json({ error: "Missing image name" });
     }
 

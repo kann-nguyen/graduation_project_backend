@@ -34,18 +34,15 @@ export async function create(req: Request, res: Response) {
   const { data } = req.body;
 
   try {
-    console.log("[create] Checking if scanner with the same name exists...");
-
     const existingScanner = await ScannerModel.findOne({ name: data.name });
     if (existingScanner) {
-      console.log("[create] Scanner already exists");
       return res.json(errorResponse("Scanner already exists"));
     }
 
-    console.log("[create] Creating new scanner document in the database...");
     const newScanner = await ScannerModel.create({
       name: data.name,
       createdBy: req.user?.username ?? "Tan Nguyen",
+      endpoint: data.endpoint, // Save the endpoint URL
       config: data.config,
     });
 
@@ -82,84 +79,6 @@ export async function create(req: Request, res: Response) {
 }
 
 
-// /**
-//  * Builds a Docker image using the specified Dockerfile.
-//  * @param dockerfilePath - The path to the Dockerfile.
-//  * @param imageName - The tag/name for the Docker image.
-//  * @returns A promise that resolves when the image build is successful.
-//  */
-// export function buildDockerImage(dockerfilePath: string, imageName: string): Promise<void> {
-//   console.log(`[buildDockerImage] Starting Docker build for image: ${imageName} using Dockerfile at: ${dockerfilePath}`);
-//   return new Promise((resolve, reject) => {
-//     // Spawn a child process to run the Docker build command.
-//     const build = spawn("docker", ["build", "-t", imageName, "-f", dockerfilePath, "."]);
-
-//     build.stdout.on("data", (data) => {
-//       console.log(`[buildDockerImage] stdout: ${data}`);
-//     });
-
-//     build.stderr.on("data", (data) => {
-//       console.error(`[buildDockerImage] stderr: ${data}`);
-//     });
-
-//     build.on("close", (code) => {
-//       if (code === 0) {
-//         console.log(`[buildDockerImage] Docker image ${imageName} built successfully.`);
-//         resolve();
-//       } else {
-//         console.error(`[buildDockerImage] Docker build failed with exit code ${code}`);
-//         reject(new Error(`Docker build failed with exit code ${code}`));
-//       }
-//     });
-//   });
-// }
-
-// /**
-//  * Runs a Docker container from the specified image and returns the endpoint URL.
-//  * @param imageName - The name of the Docker image to run.
-//  * @param containerName - The name for the running Docker container.
-//  * @param hostPort - The port on the host machine.
-//  * @param containerPort - The port exposed by the container.
-//  * @returns A promise that resolves to the endpoint URL string.
-//  */
-// export function runDockerContainer(imageName: string, containerName: string, hostPort: number, containerPort: number): Promise<string> {
-//   console.log(`[runDockerContainer] Starting Docker container '${containerName}' from image '${imageName}'.`);
-//   return new Promise((resolve, reject) => {
-//     // Spawn a child process to run the Docker run command in detached mode.
-//     const run = spawn("docker", [
-//       "run",
-//       "-d", // Run container in detached mode.
-//       "--name", containerName,
-//       "-p", `${hostPort}:${containerPort}`,
-//       imageName,
-//     ]);
-
-//     let containerId = "";
-//     run.stdout.on("data", (data) => {
-//       containerId += data.toString();
-//       console.log(`[runDockerContainer] stdout: ${data}`);
-//     });
-
-//     run.stderr.on("data", (data) => {
-//       console.error(`[runDockerContainer] stderr: ${data}`);
-//     });
-
-//     run.on("close", (code) => {
-//       if (code === 0) {
-//         // Trim the container ID received and build the endpoint URL.
-//         containerId = containerId.trim();
-//         console.log(`[runDockerContainer] Docker container '${containerName}' started successfully with ID: ${containerId}`);
-//         const endpointUrl = `http://localhost:${hostPort}`;
-//         resolve(endpointUrl);
-//       } else {
-//         console.error(`[runDockerContainer] Docker run failed with exit code ${code}`);
-//         reject(new Error(`Docker run failed with exit code ${code}`));
-//       }
-//     });
-//   });
-// }
-
-
 // Get sample code for vulnerabilities
 export async function getSampleCode(req: Request, res: Response) {
   return res.json(
@@ -194,6 +113,7 @@ export async function update(req: Request, res: Response) {
         name: data.name,
       },
       {
+        endpoint: data.endpoint,
         config: {
           installCommand: data.config.installCommand,
           code: data.config.code,
