@@ -64,7 +64,15 @@ export class Artifact extends TimeStamps {
 
   @prop({ default: false,select: false  })
   public isScanning?: boolean; // trạng thái đang quét hay không
-
   @prop({ select: false }) // không lưu trong DB
   public tempVuls?: ArraySubDocumentType<Vulnerability>[]; // danh sách vuln tạm thời từ scanner
+
+  @prop({ default: [], type: () => [{
+    timestamp: Date,
+    vulnerabilities: () => [Vulnerability]
+  }] })
+  public scanHistory?: {
+    timestamp: Date;
+    vulnerabilities: ArraySubDocumentType<Vulnerability>[];
+  }[]; // history of all scans for tracking
 }

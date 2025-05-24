@@ -449,7 +449,22 @@ export async function updateArtifactAfterScan(artifact: any): Promise<void> {
     // 2. Xử lý tempVuls: tạo threat mới cho vulnerability không có trong danh sách cũ
     await processNewVulnerabilities(artifact);
 
-    // 3. Gán lại vulnerabilityList bằng tempVuls và lưu artifact
+    // 3. Lưu lịch sử quét vào scanHistory
+    if (artifact.tempVuls && artifact.tempVuls.length > 0) {
+      if (!artifact.scanHistory) {
+        artifact.scanHistory = [];
+      }
+      
+      // Add current scan to history
+      artifact.scanHistory.push({
+        timestamp: new Date(),
+        vulnerabilities: artifact.tempVuls || []
+      });
+      
+      console.log(`Added scan history entry with ${artifact.tempVuls.length} vulnerabilities`);
+    }
+
+    // 4. Gán lại vulnerabilityList bằng tempVuls và lưu artifact
     artifact.vulnerabilityList = artifact.tempVuls || [];
     artifact.tempVuls = [];
     await artifact.save();
