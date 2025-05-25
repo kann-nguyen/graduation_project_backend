@@ -19,8 +19,7 @@ export async function getAll(req: Request, res: Response) {
     }).populate({
       path: "phaseList",
       populate: {
-        path: "artifacts",
-        select: "+isScanning state" // Explicitly include isScanning and state fields
+        path: "artifacts"// Explicitly include isScanning and state fields
       },
     });
 
@@ -54,7 +53,7 @@ export async function get(req: Request, res: Response) {
   const { id } = req.params;
   try {
     // Tìm artifact theo ID
-    const artifact = await ArtifactModel.findById(id).select("+isScanning state");
+    const artifact = await ArtifactModel.findById(id);
 
     // Trả về artifact nếu tìm thấy
     return res.json(successResponse(artifact, "Artifact fetched successfully"));
@@ -70,16 +69,13 @@ export async function update(req: Request, res: Response) {
   const { data } = req.body;
   const { threatList } = data; // Danh sách tên các threat
 
+  console.log(data);
+
   // Validate artifact before proceeding
   const validationResult = await validateArtifact(data);
   
   // Set the state based on validation result
   data.state = validationResult.valid ? "valid" : "invalid";
-  
-  // Log the validation result but proceed with artifact update
-  if (!validationResult.valid) {
-    console.log(`[INFO] Artifact validation failed: ${validationResult.error}. Updating with state = "invalid"`);
-  }
 
   try {
 
@@ -94,13 +90,17 @@ export async function update(req: Request, res: Response) {
         threatList: threats, // Gán danh sách threats vào artifact
       },
       {
-        new: true, // Trả về artifact sau khi đã cập nhật
-        select: "+isScanning" // Include isScanning field in response
+        new: true
       }
     );
 
+  
+    if (!validationResult.valid) {
+      return res.json(successResponse(artifact, `Artifact updated successfully but is not valid: ${validationResult.error}` ));
+    }
     // Trả về artifact sau khi cập nhật thành công
     return res.json(successResponse(artifact, "Artifact updated successfully"));
+
   } catch (error) {
     // Xử lý lỗi nếu có vấn đề trong quá trình cập nhật
     return res.json(error);
@@ -477,14 +477,11 @@ export async function updateArtifactAfterScan(artifact: any): Promise<void> {
 
 // Migrate artifacts to ensure they all have a state field
 export async function migrateArtifactsState() {
-  try {
-    console.log("[INFO] Starting artifact state migration check");
-    
+  try {    
     // Find all artifacts without a state field
     const artifacts = await ArtifactModel.find({ state: { $exists: false } });
     
     if (artifacts.length === 0) {
-      console.log("[INFO] No artifacts need state migration");
       return;
     }
     

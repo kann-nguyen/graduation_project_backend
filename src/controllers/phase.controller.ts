@@ -224,11 +224,7 @@ export async function addArtifactToPhase(req: Request, res: Response) {
     
     // Set the state based on validation result
     data.state = validationResult.valid ? "valid" : "invalid";
-    
-    // Log the validation result but proceed with artifact creation
-    if (!validationResult.valid) {
-      console.log(`[INFO] Artifact validation failed: ${validationResult.error}. Creating with state = "invalid"`);
-    }
+  
 
     // Fetch vulnerabilities and threats before creating artifact
     if (cpe) { 
@@ -257,10 +253,11 @@ export async function addArtifactToPhase(req: Request, res: Response) {
         { $addToSet: { artifacts: artifact._id } },
         { new: true }
       );      // ✅ Trả về response ngay, để user thấy artifact trong phase
-      res.json(successResponse(null, "Artifact added to phase and scanning started in background"));
+  
 
       // ✅ Bắt đầu scan ở background only if artifact is valid
       if (artifact.state === "valid") {
+        res.json(successResponse(null, "Artifact added to phase and scanning started in background"));
         setImmediate(async () => {
           try {
             await scanArtifact(artifact, id);
@@ -269,7 +266,7 @@ export async function addArtifactToPhase(req: Request, res: Response) {
           }
         });
       } else {
-        console.log(`[INFO] Skipping scan for invalid artifact: ${artifact.name}`);
+        res.json(successResponse(null, `Artifact added to phase but is not valid${validationResult.error}`));
       }
 
     } catch (error) {

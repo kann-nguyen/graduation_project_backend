@@ -134,7 +134,6 @@ async function getPullRequestsGithub(
   projectId: Ref<Project> // ID của dự án trong hệ thống
 ) {
   try {
-    console.log(`[getPullRequestsGithub] Fetching PRs for ${owner}/${repo}`);
     const prData = [];
 
     // Sử dụng octokit để lấy tất cả Pull Requests của repository theo từng trang
@@ -149,8 +148,6 @@ async function getPullRequestsGithub(
     )) {
       prData.push(response.data);
     }
-
-    console.log(`[getPullRequestsGithub] Raw PR Data:`, prData);
 
     // Chuyển đổi dữ liệu PR thành định dạng phù hợp
     const processedPrData = prData
@@ -167,10 +164,8 @@ async function getPullRequestsGithub(
         };
       });
 
-    console.log(`[getPullRequestsGithub] Processed PR Data:`, processedPrData);
     return processedPrData; // Trả về danh sách PR đã xử lý
   } catch (error) {
-    console.error(`[getPullRequestsGithub] Error:`, error); // Ghi log lỗi nếu có
     return []; // Trả về mảng rỗng nếu có lỗi
   }
 }
@@ -183,7 +178,6 @@ async function getCommitsGithub(
   projectId: Ref<Project> // ID của dự án trong hệ thống
 ) {
   try {
-    console.log(`[getCommitsGithub] Fetching commits for ${owner}/${repo}`);
     const commits = [];
 
     // Sử dụng octokit để lấy danh sách commits của repository theo từng trang
@@ -197,8 +191,6 @@ async function getCommitsGithub(
     )) {
       commits.push(response.data);
     }
-
-    console.log(`[getCommitsGithub] Raw Commit Data:`, commits);
 
     // Xử lý dữ liệu commits nhận được từ GitHub
     const processedCommitData = commits.flat().map(({ sha: id, commit }) => {
@@ -215,8 +207,6 @@ async function getCommitsGithub(
       };
     });
 
-    console.log(`[getCommitsGithub] Processed Commit Data:`, processedCommitData);
-
     return processedCommitData; // Trả về danh sách commits đã xử lý
   } catch (error) {
     console.error(`[getCommitsGithub] Error:`, error);// Ghi log lỗi nếu có
@@ -231,16 +221,13 @@ async function fetchLatestFromGithub(
   accountId: Types.ObjectId | undefined, // ID tài khoản của người dùng
   projectId: Ref<Project> // ID của dự án trong hệ thống
 ) {
-  console.log(`[fetchLatestFromGithub] Fetching latest data for ${owner}/${repo}`);
   if (!owner || !repo) {
-    console.error(`[fetchLatestFromGithub] Missing owner or repo`);
     return new Error("Missing owner, repo"); // Trả về lỗi nếu thiếu thông tin repo
   }
 
   // Kiểm tra cache trong Redis để tránh gọi API quá nhiều lần
   const cache = await redis.get(`github-${repo}`);
   if (cache) {
-    console.log(`[fetchLatestFromGithub] Cache exists for ${repo}, skipping fetch`);
     return; // Nếu đã có cache, không cần fetch lại dữ liệu
   } 
 
@@ -280,7 +267,6 @@ async function fetchLatestFromGithub(
       projectId,
       "Github"
     );
-    console.log(`[fetchLatestFromGithub] Data successfully inserted`);
     return;
   } catch (error) {
     return; // Nếu lỗi khi lưu dữ liệu, bỏ qua và không trả về lỗi
@@ -292,7 +278,6 @@ export async function getActivityHistory(req: Request, res: Response) {
   const { projectName } = req.params; // Lấy projectName từ request params
   const { username } = req.query; // Lấy username từ query (nếu có)
 
-  console.log(`[getActivityHistory] Request received for project: ${projectName}, user: ${username}`);
   try {
     // Tìm user dựa trên username (nếu có)
     const user = await AccountModel.findOne({ username });
@@ -300,7 +285,6 @@ export async function getActivityHistory(req: Request, res: Response) {
     // Tìm project theo tên
     const project = await ProjectModel.findOne({ name: projectName });
     if (!project) {
-      console.error(`[getActivityHistory] Project not found: ${projectName}`);
       return res.json(errorResponse("Project not found")); // Nếu không tìm thấy project, trả về lỗi
     }
 
@@ -308,13 +292,11 @@ export async function getActivityHistory(req: Request, res: Response) {
 
     // Kiểm tra nếu project là repo GitHub
     if (url.includes("github")) {
-      console.log(`[getActivityHistory] Fetching from GitHub`);
       const [owner, repo] = projectName.split("/"); // Tách owner và repo từ tên project
       const result = await fetchLatestFromGithub(owner, repo, req.user?._id, _id);
 
       // Nếu có lỗi khi fetch dữ liệu, trả về lỗi
       if (result instanceof Error) {
-        console.error(`[getActivityHistory] Error updating history: ${result.message}`);
         return res.json(errorResponse(`Error updating latest activity history: ${result.message}`));
       }
 
@@ -325,7 +307,6 @@ export async function getActivityHistory(req: Request, res: Response) {
           createdBy: user.thirdParty.find((x) => x.name === "Github")?.username,
         });
 
-        console.log(`[getActivityHistory] Retrieved activity history:`, actHist);
         return res.json(successResponse(actHist, "Successfully retrieved activity history"));
       }
 
