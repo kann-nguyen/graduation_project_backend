@@ -26,7 +26,8 @@ import scanner from "../routes/scanner";
 // Lấy thông tin chi tiết của một Phase theo ID
 export async function get(req: Request, res: Response) {
   const { id } = req.params; // Lấy ID của Phase từ request params
-  try {    // Tìm Phase theo ID và populate dữ liệu liên quan
+  try {
+    // Tìm Phase theo ID và populate dữ liệu liên quan
     const phase = await PhaseModel.findById(id).populate([
       {
         path: "tasks", // Lấy danh sách tasks liên quan đến Phase
@@ -37,6 +38,9 @@ export async function get(req: Request, res: Response) {
         populate: {
           path: "threatList vulnerabilityList", // Populate danh sách threats và vulnerabilities
         },
+      },
+      {
+        path: "scanners", // Lấy danh sách scanners của Phase
       },
     ]);
 
@@ -504,6 +508,38 @@ export async function addScannerToPhase(req: Request, res: Response) {
     await phase.save();
 
     return res.json(successResponse(phase, "Scanner added to phase successfully"));
+  } catch (error) {
+    return res.json(errorResponse(`Internal server error: ${error}`));
+  }
+}
+
+export async function removeScannerFromPhase(req: Request, res: Response) {
+  const { phaseId, scannerId } = req.body;
+
+  try {
+    // Check if the phase exists
+    const phase = await PhaseModel.findById(phaseId);
+    if (!phase) {
+      return res.json(errorResponse("Phase not found"));
+    }
+
+    // Check if the scanner exists
+    const scanner = await ScannerModel.findById(scannerId);
+    if (!scanner) {
+      return res.json(errorResponse("Scanner not found"));
+    }
+
+    // Check if scanner exists in the phase
+    if (!phase.scanners?.includes(scanner._id)) {
+      return res.json(errorResponse("Scanner not found in this phase"));
+    }
+
+    // Remove scanner from phase
+    await PhaseModel.findByIdAndUpdate(phaseId, {
+      $pull: { scanners: scannerId },
+    });
+
+    return res.json(successResponse(null, "Scanner removed from phase successfully"));
   } catch (error) {
     return res.json(errorResponse(`Internal server error: ${error}`));
   }

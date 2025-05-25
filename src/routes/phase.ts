@@ -10,11 +10,10 @@ import {
   removeArtifactFromPhase,
   getTemplates,
   getOneTemplate,
-  updateTemplate,
-  deleteTemplate,
+  updateTemplate,  deleteTemplate,
   createPhaseTemplate,
   addScannerToPhase,
-  //   removeScannerFromPhase, // Commented out as it is not exported
+  removeScannerFromPhase,
 } from "../controllers/phase.controller";
 import { checkAuth, checkAdmin, checkProjectManager } from "../middlewares/auth";
 
@@ -45,6 +44,6 @@ phaseRoute.patch("/:id/artifact/delete/:artifactId", checkAuth, checkProjectMana
 
 // Scanner management - require project manager permissions
 phaseRoute.post("/scanner/add", checkAuth, checkProjectManager, addScannerToPhase);
-// phaseRoute.post("/scanner/remove", checkAuth, checkProjectManager, removeScannerFromPhase); // Commented out as it is not exported
+phaseRoute.post("/scanner/remove", checkAuth, checkProjectManager, removeScannerFromPhase);
 
 export default phaseRoute;
