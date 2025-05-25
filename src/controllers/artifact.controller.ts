@@ -1,6 +1,6 @@
 import { isDocumentArray } from "@typegoose/typegoose";
 import { Request, Response } from "express";
-import { ArtifactModel, ProjectModel, ThreatModel } from "../models/models";
+import { ArtifactModel, ProjectModel, ThreatModel, PhaseModel } from "../models/models";
 import { errorResponse, successResponse } from "../utils/responseFormat";
 import { Vulnerability } from "../models/vulnerability";
 import { Threat } from "../models/threat";
@@ -9,6 +9,7 @@ import * as fs from "fs/promises";
 import { autoCreateTicketFromThreat, updateTicketStatusForThreat } from "./ticket.controller";
 import { calculateScoresFromVulnerability } from "./threat.controller";
 import { validateArtifact } from "../utils/validateArtifact";
+import { scanArtifact } from "./phase.controller";
 
 // Lấy tất cả artifacts thuộc về một project cụ thể
 export async function getAll(req: Request, res: Response) {
@@ -67,39 +68,52 @@ export async function get(req: Request, res: Response) {
 export async function update(req: Request, res: Response) {
   const { id } = req.params;
   const { data } = req.body;
-  const { threatList } = data; // Danh sách tên các threat
-
   console.log(data);
 
   // Validate artifact before proceeding
   const validationResult = await validateArtifact(data);
-  
+
   // Set the state based on validation result
   data.state = validationResult.valid ? "valid" : "invalid";
 
   try {
 
-    // Tìm danh sách các threat trong database dựa trên tên
-    const threats = await ThreatModel.find({ name: { $in: threatList } });
-
     // Cập nhật artifact với dữ liệu mới và danh sách threats
     const artifact = await ArtifactModel.findByIdAndUpdate(
       id,
       {
-        ...data,
-        threatList: threats, // Gán danh sách threats vào artifact
+        ...data
       },
       {
         new: true
       }
     );
 
-  
+
     if (!validationResult.valid) {
-      return res.json(successResponse(artifact, `Artifact updated successfully but is not valid: ${validationResult.error}` ));
-    }
-    // Trả về artifact sau khi cập nhật thành công
+      return res.json(successResponse(artifact, `Artifact updated successfully but is not valid: ${validationResult.error}`));
+    }    // Trả về artifact sau khi cập nhật thành công
+        setImmediate(async () => {
+      try {
+        if (artifact) {
+          // Find the phase that contains this artifact
+          const phase = await PhaseModel.findOne({ artifacts: artifact._id });
+          if (!phase) {
+            console.error(`[ERROR] Could not find phase containing artifact ${artifact._id}`);
+            return;
+          }
+          
+          // Trigger scan with the correct phase ID
+          await scanArtifact(artifact, phase._id.toString());
+        } else {
+          console.error("[ERROR] Cannot scan: artifact is null");
+        }
+      } catch (error) {
+        console.error("[ERROR] Scanning failed:", error);
+      }
+    });
     return res.json(successResponse(artifact, "Artifact updated successfully"));
+
 
   } catch (error) {
     // Xử lý lỗi nếu có vấn đề trong quá trình cập nhật
@@ -454,13 +468,13 @@ export async function updateArtifactAfterScan(artifact: any): Promise<void> {
       if (!artifact.scanHistory) {
         artifact.scanHistory = [];
       }
-      
+
       // Add current scan to history
       artifact.scanHistory.push({
         timestamp: new Date(),
         vulnerabilities: artifact.tempVuls || []
       });
-      
+
       console.log(`Added scan history entry with ${artifact.tempVuls.length} vulnerabilities`);
     }
 
@@ -477,22 +491,22 @@ export async function updateArtifactAfterScan(artifact: any): Promise<void> {
 
 // Migrate artifacts to ensure they all have a state field
 export async function migrateArtifactsState() {
-  try {    
+  try {
     // Find all artifacts without a state field
     const artifacts = await ArtifactModel.find({ state: { $exists: false } });
-    
+
     if (artifacts.length === 0) {
       return;
     }
-    
+
     console.log(`[INFO] Found ${artifacts.length} artifacts without state field, applying migration`);
-    
+
     // Update all artifacts to set default state to valid
     const updateResult = await ArtifactModel.updateMany(
       { state: { $exists: false } },
       { $set: { state: "valid" } }
     );
-    
+
     console.log(`[INFO] Migration complete: ${updateResult.modifiedCount} artifacts updated`);
   } catch (error) {
     console.error("[ERROR] Failed to migrate artifact states:", error);
