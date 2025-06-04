@@ -376,7 +376,6 @@ export async function updateTicketStatusForThreat(threatId: any, isDone: boolean
 
 export async function suggestAssigneeFromThreatType(projectId: string, threatType: string) {
   try {
-    console.log(`🔍 [suggestAssigneeFromThreatType] Searching for assignees in project: ${projectId} for threat type: ${threatType}`);
 
     // Fetch all members in the project
     const members = await UserModel.find({ projectIn: projectId });

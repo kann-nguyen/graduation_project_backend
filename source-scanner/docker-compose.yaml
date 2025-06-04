@@ -1,6 +1,0 @@
-version: "1"
-services:
-  scanner:
-    build: .
-    ports:
-      - "5000:4000"

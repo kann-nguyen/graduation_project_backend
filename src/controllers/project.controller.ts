@@ -3,8 +3,7 @@ import { PhaseModel, ProjectModel, UserModel } from "../models/models";
 import { Phase } from "../models/phase";
 import { errorResponse, successResponse } from "../utils/responseFormat";
 
-export async function get(req: Request, res: Response) {
-  try {
+export async function get(req: Request, res: Response) {  try {
     const { projectName } = req.params;
     const project = await ProjectModel.findOne({ name: projectName }).populate({
       path: "phaseList",
@@ -19,6 +18,7 @@ export async function get(req: Request, res: Response) {
         },
         {
           path: "artifacts",
+          select: "name type url version threatList vulnerabilityList cpe isScanning state", // Explicitly include all needed fields including state
           populate: {
             path: "threatList vulnerabilityList",
           },

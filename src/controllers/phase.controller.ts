@@ -34,9 +34,13 @@ export async function get(req: Request, res: Response) {
       },
       {
         path: "artifacts", // Lấy danh sách artifacts của Phase
+        select: "name type url version threatList vulnerabilityList cpe isScanning state", // Explicitly include state field
         populate: {
           path: "threatList vulnerabilityList", // Populate danh sách threats và vulnerabilities
         },
+      },
+      {
+        path: "scanners", // Lấy danh sách scanners của Phase
       },
     ]);
 
@@ -213,19 +217,18 @@ export async function addArtifactToPhase(req: Request, res: Response) {
     }
     
     data.projectId = user.projectIn[0]?.toString() || "";
-    
-    // Check if projectId exists
+      // Check if projectId exists
     if (!data.projectId) {
       console.log("No project associated with user");
       return res.json(errorResponse("No project associated with user"));
     }
-
+    
     // Validate artifact before proceeding
     const validationResult = await validateArtifact(data);
-    if (!validationResult.valid) {
-      console.log(`[ERROR] Artifact validation failed: ${validationResult.error}`);
-      return res.json(errorResponse(validationResult.error || "Artifact validation failed"));
-    }
+    
+    // Set the state based on validation result
+    data.state = validationResult.valid ? "valid" : "invalid";
+  
 
     // Fetch vulnerabilities and threats before creating artifact
     if (cpe) { 
@@ -245,10 +248,7 @@ export async function addArtifactToPhase(req: Request, res: Response) {
       } catch (error) {
         data.threatList = [];
       }
-    }
-
-    try {
-      data.state = "S1"; // ✅ Gán state ban đầu là S1
+    }    try {
       const artifact = await ArtifactModel.create(data);
 
       // ✅ Thêm artifact vào phase ngay lập tức
@@ -256,19 +256,22 @@ export async function addArtifactToPhase(req: Request, res: Response) {
         id,
         { $addToSet: { artifacts: artifact._id } },
         { new: true }
-      );
+      );      // ✅ Trả về response ngay, để user thấy artifact trong phase
+  
 
-      // ✅ Trả về response ngay, để user thấy artifact trong phase
-      res.json(successResponse(null, "Artifact added to phase and scanning started in background"));
-
-      // ✅ Bắt đầu scan ở background
-      setImmediate(async () => {
-        try {
-          await scanArtifact(artifact, id);
-        } catch (error) {
-          console.error("[ERROR] Scanning failed:", error);
-        }
-      });
+      // ✅ Bắt đầu scan ở background only if artifact is valid
+      if (artifact.state === "valid") {
+        res.json(successResponse(null, "Artifact added to phase and scanning started in background"));
+        setImmediate(async () => {
+          try {
+            await scanArtifact(artifact, id);
+          } catch (error) {
+            console.error("[ERROR] Scanning failed:", error);
+          }
+        });
+      } else {
+        res.json(successResponse(null, `Artifact added to phase but is not valid${validationResult.error}`));
+      }
 
     } catch (error) {
       console.error("[ERROR] Internal server error", error);
@@ -300,6 +303,12 @@ export async function scanArtifact(artifact: Artifact, phaseId: string) {
     console.error("[ERROR] Artifact not found in the database");
     return;
   }
+  
+  // Skip scanning if the artifact is invalid
+  if (artifactImage.state === "invalid") {
+    console.log(`[INFO] Skipping scanning for invalid artifact: ${artifact.name}`);
+    return;
+  }
 
   artifactImage.totalScanners = Math.max(scannerIds.length, 1);
   artifactImage.scannersCompleted = 0;
@@ -315,16 +324,9 @@ export async function scanArtifact(artifact: Artifact, phaseId: string) {
       case "source code":
         await scanSourceCode(artifact);
         break;
-      case "image":
-        // If we have scanners in the phase, try to use them first
+      case "image":        // If we have scanners in the phase, try to use them first
         if (scannerIds.length > 0) {
           console.log(`[INFO] Found ${scannerIds.length} scanner IDs for phase. Will attempt to use them for image scanning.`);
-          
-          // Create a custom HTTPS agent that ignores SSL certificate errors for development
-          const https = require('https');
-          const httpsAgent = new https.Agent({
-            rejectUnauthorized: false
-          });
           
           // Fetch and use each scanner by ID
           for (const scannerId of scannerIds) {
@@ -340,14 +342,28 @@ export async function scanArtifact(artifact: Artifact, phaseId: string) {
             if (scanner.endpoint) {
               try {
                 console.log(`[INFO] Calling scanner ${scanner.name} at endpoint ${scanner.endpoint}`);
-                // Make the API call to the scanner with a timeout
-                await axios.post(`${scanner.endpoint}`,{
+                
+                // Determine if we need HTTPS agent based on endpoint URL
+                const isHttps = scanner.endpoint.startsWith('https://');
+                let requestConfig: any = {
+                  timeout: 300000, // 30 second timeout
+                };
+                
+                if (isHttps) {
+                  // Create HTTPS agent only for HTTPS endpoints
+                  const https = require('https');
+                  requestConfig.httpsAgent = new https.Agent({
+                    rejectUnauthorized: false // Ignore SSL certificate verification for development
+                  });
+                }
+                
+                // Make the API call to the scanner - use GET with params for compatibility
+                axios.get(`${scanner.endpoint}`, {
                   params: {
                     name: `${artifact.name}:${artifact.version}`,
                   },
-                  httpsAgent
+                  ...requestConfig
                 });
-                console.log(`Image scanning triggered for artifact: ${artifact.name}`);
               } catch (error) {
                 if (error instanceof Error) {
                   console.error(`[ERROR] Failed to call scanner ${scanner.name}:`, error.message);
@@ -499,6 +515,38 @@ export async function addScannerToPhase(req: Request, res: Response) {
     await phase.save();
 
     return res.json(successResponse(phase, "Scanner added to phase successfully"));
+  } catch (error) {
+    return res.json(errorResponse(`Internal server error: ${error}`));
+  }
+}
+
+export async function removeScannerFromPhase(req: Request, res: Response) {
+  const { phaseId, scannerId } = req.body;
+
+  try {
+    // Check if the phase exists
+    const phase = await PhaseModel.findById(phaseId);
+    if (!phase) {
+      return res.json(errorResponse("Phase not found"));
+    }
+
+    // Check if the scanner exists
+    const scanner = await ScannerModel.findById(scannerId);
+    if (!scanner) {
+      return res.json(errorResponse("Scanner not found"));
+    }
+
+    // Check if scanner exists in the phase
+    if (!phase.scanners?.includes(scanner._id)) {
+      return res.json(errorResponse("Scanner not found in this phase"));
+    }
+
+    // Remove scanner from phase
+    await PhaseModel.findByIdAndUpdate(phaseId, {
+      $pull: { scanners: scannerId },
+    });
+
+    return res.json(successResponse(null, "Scanner removed from phase successfully"));
   } catch (error) {
     return res.json(errorResponse(`Internal server error: ${error}`));
   }
