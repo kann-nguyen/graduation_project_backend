@@ -72,52 +72,50 @@ export async function update(req: Request, res: Response) {
 
   // Validate artifact before proceeding
   const validationResult = await validateArtifact(data);
-
+  
   // Set the state based on validation result
   data.state = validationResult.valid ? "valid" : "invalid";
 
   try {
-
-    // Cập nhật artifact với dữ liệu mới và danh sách threats
+    // Cập nhật artifact với dữ liệu mới
     const artifact = await ArtifactModel.findByIdAndUpdate(
       id,
       {
-        ...data
+        ...data,
       },
       {
-        new: true
+        new: true, // Trả về artifact sau khi đã cập nhật
       }
     );
 
+    if (!artifact) {
+      return res.json(errorResponse("Artifact not found"));
+    }
 
-    if (!validationResult.valid) {
-      return res.json(successResponse(artifact, `Artifact updated successfully but is not valid: ${validationResult.error}`));
-    }    // Trả về artifact sau khi cập nhật thành công
-        setImmediate(async () => {
-      try {
-        if (artifact) {
-          // Find the phase that contains this artifact
-          const phase = await PhaseModel.findOne({ artifacts: artifact._id });
-          if (!phase) {
-            console.error(`[ERROR] Could not find phase containing artifact ${artifact._id}`);
-            return;
-          }
-          
-          // Trigger scan with the correct phase ID
+    // Find the phase that contains this artifact
+    const phase = await PhaseModel.findOne({ artifacts: artifact._id });
+    
+    if (!phase) {
+      return res.json(errorResponse("Phase containing this artifact not found"));
+    }
+
+    // ✅ Bắt đầu scan ở background only if artifact is valid
+    if (artifact.state === "valid") {
+      res.json(successResponse(null, "Artifact updated successfully and scanning started in background"));
+      setImmediate(async () => {
+        try {
           await scanArtifact(artifact, phase._id.toString());
-        } else {
-          console.error("[ERROR] Cannot scan: artifact is null");
+        } catch (error) {
+          console.error("[ERROR] Scanning failed:", error);
         }
-      } catch (error) {
-        console.error("[ERROR] Scanning failed:", error);
-      }
-    });
-    return res.json(successResponse(artifact, "Artifact updated successfully"));
-
+      });
+    } else {
+      res.json(successResponse(null, `Artifact updated successfully but is not valid: ${validationResult.error}`));
+    }
 
   } catch (error) {
-    // Xử lý lỗi nếu có vấn đề trong quá trình cập nhật
-    return res.json(error);
+    console.error("[ERROR] Internal server error", error);
+    return res.json(errorResponse(`Internal server error: ${error}`));
   }
 }
 
@@ -421,11 +419,12 @@ async function processExistingThreats(artifact: any): Promise<void> {
       console.log(`Threat ${threat._id} bị xóa vì không tìm thấy vulnerability tương ứng.`);
     }
   }
-
-  // Loại bỏ các threat đã bị xóa khỏi artifact.threatList
+  
+  // Loại bỏ các threat đã bị xóa khỏi artifact.threatList (không xóa khỏi database)
   artifact.threatList = artifact.threatList.filter(
-    (t: any) => !threatsToRemove.includes(t._id.toString())
+    (t: any) => !threatsToRemove.some((removeId: any) => removeId.toString() === t._id.toString())
   );
+
 }
 
 /**
@@ -515,6 +514,23 @@ export async function migrateArtifactsState() {
 
 // Run migration on startup
 migrateArtifactsState();
+
+// Get the phase ID that contains a specific artifact
+export async function getPhaseForArtifact(req: Request, res: Response) {
+  const { id } = req.params;
+  try {
+    // Find the phase that contains this artifact
+    const phase = await PhaseModel.findOne({ artifacts: id }).select('_id name');
+    
+    if (!phase) {
+      return res.json(errorResponse("Phase containing this artifact not found"));
+    }
+
+    return res.json(successResponse({ phaseId: phase._id, phaseName: phase.name }, "Phase found successfully"));
+  } catch (error) {
+    return res.json(errorResponse(`Internal server error: ${error}`));
+  }
+}
 
 
 

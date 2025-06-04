@@ -324,16 +324,9 @@ export async function scanArtifact(artifact: Artifact, phaseId: string) {
       case "source code":
         await scanSourceCode(artifact);
         break;
-      case "image":
-        // If we have scanners in the phase, try to use them first
+      case "image":        // If we have scanners in the phase, try to use them first
         if (scannerIds.length > 0) {
           console.log(`[INFO] Found ${scannerIds.length} scanner IDs for phase. Will attempt to use them for image scanning.`);
-          
-          // Create a custom HTTPS agent that ignores SSL certificate errors for development
-          const https = require('https');
-          const httpsAgent = new https.Agent({
-            rejectUnauthorized: false
-          });
           
           // Fetch and use each scanner by ID
           for (const scannerId of scannerIds) {
@@ -349,14 +342,28 @@ export async function scanArtifact(artifact: Artifact, phaseId: string) {
             if (scanner.endpoint) {
               try {
                 console.log(`[INFO] Calling scanner ${scanner.name} at endpoint ${scanner.endpoint}`);
-                // Make the API call to the scanner with a timeout
-                await axios.post(`${scanner.endpoint}`,{
+                
+                // Determine if we need HTTPS agent based on endpoint URL
+                const isHttps = scanner.endpoint.startsWith('https://');
+                let requestConfig: any = {
+                  timeout: 300000, // 30 second timeout
+                };
+                
+                if (isHttps) {
+                  // Create HTTPS agent only for HTTPS endpoints
+                  const https = require('https');
+                  requestConfig.httpsAgent = new https.Agent({
+                    rejectUnauthorized: false // Ignore SSL certificate verification for development
+                  });
+                }
+                
+                // Make the API call to the scanner - use GET with params for compatibility
+                axios.get(`${scanner.endpoint}`, {
                   params: {
                     name: `${artifact.name}:${artifact.version}`,
                   },
-                  httpsAgent
+                  ...requestConfig
                 });
-                console.log(`Image scanning triggered for artifact: ${artifact.name}`);
               } catch (error) {
                 if (error instanceof Error) {
                   console.error(`[ERROR] Failed to call scanner ${scanner.name}:`, error.message);
