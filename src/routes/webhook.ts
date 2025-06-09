@@ -3,7 +3,7 @@ import { importVulnToDocs, importVulnToImage } from "../controllers/webhook.cont
 const webhookRoute = express.Router();
 
 webhookRoute.post("/image", importVulnToImage);
-
+webhookRoute.post("/code", importVulnToImage);
 
 webhookRoute.post("/docs", importVulnToDocs);
 

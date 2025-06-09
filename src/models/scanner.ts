@@ -24,4 +24,12 @@ export class Scanner {
    // New property to store the endpoint URL of the running Docker container
    @prop()
    public endpoint?: string;
+
+  // Add scanner type to identify which adapter to use
+  @prop({ required: true })
+  public type!: string; // 'sonarqube', 'trivy', 'grype', 'zap', etc.
+
+  // Optional: Add expected result format info
+  @prop()
+  public resultFormat?: string; // 'json', 'xml', 'sarif'
 }

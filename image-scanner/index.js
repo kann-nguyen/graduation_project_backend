@@ -8,6 +8,230 @@ import axios from "axios";
 const app = express();
 const port = 3000;
 
+// Vulnerability Standardization System
+class VulnerabilityStandardizer {
+  constructor() {
+    this.cweToThreatMapping = new Map([
+      ['CWE-79', ['Tampering', 'Information Disclosure']], // XSS
+      ['CWE-89', ['Tampering', 'Information Disclosure']], // SQL Injection
+      ['CWE-287', ['Spoofing']], // Authentication bypass
+      ['CWE-285', ['Elevation of Privilege']], // Authorization
+      ['CWE-200', ['Information Disclosure']], // Info exposure
+      ['CWE-400', ['Denial of Service']], // Resource exhaustion
+      ['CWE-352', ['Tampering']], // CSRF
+      ['CWE-502', ['Tampering', 'Elevation of Privilege']], // Deserialization
+    ]);
+    
+    this.keywordToThreatMapping = new Map([
+      ['authentication', ['Spoofing']],
+      ['authorization', ['Elevation of Privilege']],
+      ['injection', ['Tampering', 'Information Disclosure']],
+      ['xss', ['Tampering', 'Information Disclosure']],
+      ['csrf', ['Tampering']],
+      ['disclosure', ['Information Disclosure']],
+      ['denial', ['Denial of Service']],
+      ['privilege', ['Elevation of Privilege']],
+      ['logging', ['Repudiation']],
+    ]);
+  }
+
+  standardizeVulnerability(rawVuln, scannerType) {
+    const basicStandardized = {
+      cveId: rawVuln.cveId || rawVuln.id || 'UNKNOWN',
+      severity: rawVuln.severity || 'Unknown',
+      description: rawVuln.description || rawVuln.message || '',
+      score: rawVuln.score || null,
+      cvssVector: rawVuln.cvssVector || null,
+      cwes: rawVuln.cwes || null
+    };
+    
+    const threatContext = this.mapVulnerabilityToThreat(basicStandardized);
+    
+    return {
+      ...basicStandardized,
+      threatType: threatContext.primaryThreatType,
+      threatCategories: [threatContext.primaryThreatType, ...threatContext.alternativeTypes],
+      riskLevel: this.calculateRiskLevel(basicStandardized)
+    };
+  }
+
+  mapVulnerabilityToThreat(vuln) {
+    const votes = [];
+
+    // Analyze CWEs
+    if (vuln.cwes && vuln.cwes.length > 0) {
+      vuln.cwes.forEach(cwe => {
+        const threatTypes = this.cweToThreatMapping.get(cwe);
+        if (threatTypes) {
+          threatTypes.forEach(type => {
+            votes.push({ type, weight: 3, reason: `CWE ${cwe} maps to ${type}` });
+          });
+        }
+      });
+    }
+
+    // Analyze description keywords
+    if (vuln.description) {
+      const desc = vuln.description.toLowerCase();
+      for (const [keyword, threatTypes] of this.keywordToThreatMapping.entries()) {
+        if (desc.includes(keyword)) {
+          threatTypes.forEach(type => {
+            votes.push({ type, weight: 2, reason: `Contains "${keyword}" keyword` });
+          });
+        }
+      }
+    }
+
+    // Calculate threat type scores
+    const threatScores = new Map();
+    votes.forEach(vote => {
+      if (!threatScores.has(vote.type)) {
+        threatScores.set(vote.type, { score: 0, reasons: [] });
+      }
+      const current = threatScores.get(vote.type);
+      current.score += vote.weight;
+      current.reasons.push(vote.reason);
+    });
+
+    const sortedThreats = Array.from(threatScores.entries())
+      .sort(([,a], [,b]) => b.score - a.score);
+
+    return {
+      primaryThreatType: sortedThreats.length > 0 ? sortedThreats[0][0] : 'Information Disclosure',
+      confidence: sortedThreats.length > 0 ? Math.min(sortedThreats[0][1].score / 5, 1) : 0.5,
+      reasoning: sortedThreats.length > 0 ? sortedThreats[0][1].reasons : [],
+      alternativeTypes: sortedThreats.slice(1, 3).map(([type]) => type)
+    };
+  }
+
+  calculateRiskLevel(vuln) {
+    if (vuln.score === null) return 'UNKNOWN';
+    if (vuln.score >= 9) return 'CRITICAL';
+    if (vuln.score >= 7) return 'HIGH';
+    if (vuln.score >= 4) return 'MEDIUM';
+    return 'LOW';
+  }
+}
+
+// Vulnerability Adapters
+class VulnerabilityAdapter {
+  adapt(rawResult) { throw new Error('Must implement adapt method'); }
+  getScannerType() { throw new Error('Must implement getScannerType method'); }
+}
+
+class SonarQubeAdapter extends VulnerabilityAdapter {
+  getScannerType() { return 'sonarqube'; }
+
+  adapt(rawResult) {
+    const issues = rawResult.issues || [];
+    return issues.map(issue => ({
+      cveId: this.extractCveId(issue) || issue.rule || issue.key,
+      severity: this.mapSeverity(issue.severity),
+      description: issue.message,
+      score: this.estimateScore(issue.severity),
+      cvssVector: null,
+      cwes: this.extractCwes(issue.tags || [])
+    }));
+  }
+
+  mapSeverity(sonarSeverity) {
+    const severityMap = {
+      'BLOCKER': 'Critical',
+      'CRITICAL': 'Critical',
+      'MAJOR': 'High',
+      'MINOR': 'Medium',
+      'INFO': 'Low'
+    };
+    return severityMap[sonarSeverity] || 'Unknown';
+  }
+
+  extractCveId(issue) {
+    if (issue.message && issue.message.includes('CVE-')) {
+      const cveMatch = issue.message.match(/CVE-\d{4}-\d{4,}/);
+      return cveMatch ? cveMatch[0] : null;
+    }
+    return null;
+  }
+
+  extractCwes(tags) {
+    const cweFromTags = tags.filter(tag => 
+      tag.startsWith('cwe') || tag.includes('cwe') || tag.startsWith('CWE')
+    );
+    return cweFromTags.length > 0 ? cweFromTags : null;
+  }
+
+  estimateScore(severity) {
+    const scoreMap = {
+      'BLOCKER': 9.5,
+      'CRITICAL': 8.5,
+      'MAJOR': 6.0,
+      'MINOR': 3.0,
+      'INFO': 1.0
+    };
+    return scoreMap[severity] || null;
+  }
+}
+
+class GrypeAdapter extends VulnerabilityAdapter {
+  getScannerType() { return 'grype'; }
+
+  adapt(rawResult) {
+    const matches = rawResult.matches || [];
+    return matches.map(match => ({
+      cveId: match.vulnerability.id,
+      severity: match.vulnerability.severity,
+      description: match.vulnerability.description,
+      score: match.vulnerability.cvss?.[0]?.metrics?.baseScore || null,
+      cvssVector: match.vulnerability.cvss?.[0]?.vector || null,
+      cwes: match.vulnerability.cwe || null
+    }));
+  }
+}
+
+// Adapter Factory
+class AdapterFactory {
+  static adapters = new Map([
+    ['sonarqube', new SonarQubeAdapter()],
+    ['grype', new GrypeAdapter()]
+  ]);
+
+  static getAdapter(scannerType) {
+    return this.adapters.get(scannerType.toLowerCase()) || null;
+  }
+
+  static registerAdapter(scannerType, adapter) {
+    this.adapters.set(scannerType.toLowerCase(), adapter);
+  }
+}
+
+// Process results with adapter
+async function processResultWithAdapter(rawResult, scannerType) {
+  const adapter = AdapterFactory.getAdapter(scannerType);
+  
+  if (!adapter) {
+    log(`No adapter found for scanner type: ${scannerType}`, "ERROR");
+    return [];
+  }
+  
+  try {
+    const standardizer = new VulnerabilityStandardizer();
+    const standardVulns = adapter.adapt(rawResult);
+    
+    // Add threat mapping information to each vulnerability
+    const enhancedVulns = standardVulns.map(vuln => {
+      const enhanced = standardizer.standardizeVulnerability(vuln, scannerType);
+      log(`Mapped ${enhanced.cveId} to threat type: ${enhanced.threatType}`);
+      return enhanced;
+    });
+    
+    log(`Standardized ${enhancedVulns.length} vulnerabilities with threat mappings`);
+    return enhancedVulns;
+  } catch (error) {
+    log(`Error standardizing results: ${error.message}`, "ERROR");
+    return [];
+  }
+}
+
 // Add middleware to parse JSON in query params
 app.use((req, res, next) => {
   if (req.query.artifact) {
@@ -338,6 +562,59 @@ async function processVulnerability(vulnerability) {
   };
 }
 
+// Create a new function to process SonarQube issues like vulnerabilities
+async function processSonarIssue(issue) {
+  // Convert SonarQube issue to vulnerability format
+  const vulnerability = {
+    id: issue.key, // Use issue key as CVE-like ID
+    severity: mapSonarSeverity(issue.severity),
+    description: issue.message,
+    // Initialize fields that will be enriched
+    cvss: null,
+    cwe: null
+  };
+
+  // Try to extract any CVE references from the issue
+  let cveId = null;
+  if (issue.message && issue.message.includes('CVE-')) {
+    const cveMatch = issue.message.match(/CVE-\d{4}-\d{4,}/);
+    if (cveMatch) {
+      cveId = cveMatch[0];
+    }
+  }
+
+  // If we found a CVE, try to get enriched data
+  let cvssScore = null;
+  let cvssVector = null;
+  let cwes = [];
+
+  if (cveId) {
+    const externalData = await CveInfoService.getCveInfo(cveId);
+    if (externalData) {
+      cvssScore = externalData.score;
+      cvssVector = externalData.cvssVector;
+      cwes = externalData.cwes || [];
+    }
+  }
+
+  // Extract any CWE info from tags
+  if (issue.tags && Array.isArray(issue.tags)) {
+    const cweFromTags = issue.tags.filter(tag => tag.startsWith('cwe') || tag.includes('cwe'));
+    if (cweFromTags.length > 0) {
+      cwes = [...cwes, ...cweFromTags];
+    }
+  }
+
+  return {
+    cveId: cveId || issue.rule, // Use CVE if found, otherwise use rule key
+    severity: mapSonarSeverity(issue.severity),
+    description: issue.message,
+    score: cvssScore,
+    cvssVector: cvssVector,
+    cwes: cwes.length > 0 ? cwes : null,
+  };
+}
+
 // Determine security state based on vulnerability severity levels
 function determineSecurityState(vulnerabilities) {
   const criticals = vulnerabilities.filter((v) => v.severity === "Critical");
@@ -356,9 +633,9 @@ function determineSecurityState(vulnerabilities) {
 }
 
 // Main function to process an image scan
-async function processImageScan(name) {
+async function processImageScan(name, scannerType = 'grype') {
   const uuid = randomUUID();
-  log(`Received scan request for image: ${name} (UUID: ${uuid})`);
+  log(`Received ${scannerType} scan request for image: ${name} (UUID: ${uuid})`);
 
   try {
     // Create scan directory and setup output path
@@ -397,12 +674,9 @@ async function processImageScan(name) {
     // Step 2: Read and parse scan results
     const data = await readFile(outputPath, "utf8");
     const output = JSON.parse(data);
-    const { matches } = output;
-
-    // Step 3: Process and enrich vulnerabilities
-    const vulnerabilities = await Promise.all(
-      matches.map(match => processVulnerability(match.vulnerability))
-    );
+    const { matches } = output;    // Step 3: Process and enrich vulnerabilities using adapter
+    log(`Processing ${matches.length} vulnerabilities from Grype`);
+    const vulnerabilities = await processResultWithAdapter({ matches }, 'grype');
 
     // Step 4: Generate statistics (for logging purposes)
     getVulnerabilityStats(vulnerabilities);
@@ -431,17 +705,156 @@ async function processImageScan(name) {
   }
 }
 
+// ...existing code...
+// ...existing code...
+
+async function processCodeScan(name, url, version, scannerType = 'sonarqube') {
+  const uuid = randomUUID();
+  log(`Received ${scannerType} scan request for repo: ${name} (UUID: ${uuid})`);
+
+  try {
+    // 1. Clone or fetch the repo at the specified version (branch/tag/commit)
+    const repoDir = `./scan-log/${uuid}-repo`;
+    await mkdir(repoDir, { recursive: true });
+
+    await new Promise((resolve, reject) => {
+      const gitClone = spawn("git", ["clone", url, repoDir]);
+      gitClone.on("close", (code) => {
+        if (code === 0) {
+          if (version) {
+            // Checkout the specific version
+            const gitCheckout = spawn("git", ["checkout", version], { cwd: repoDir });
+            gitCheckout.on("close", (checkoutCode) => {
+              if (checkoutCode === 0) resolve();
+              else reject(new Error(`git checkout failed with code ${checkoutCode}`));
+            });
+          } else {
+            resolve();
+          }
+        } else {
+          reject(new Error(`git clone failed with code ${code}`));
+        }
+      });
+    });
+
+    // 2. Run SonarQube Scanner CLI
+    const SONAR_HOST_URL = process.env.SONAR_HOST_URL;
+    const SONAR_TOKEN = process.env.SONAR_TOKEN;
+    const SONAR_ORGANIZATION = process.env.SONAR_ORGANIZATION;
+    const projectKey = `scan-${name}-${version}`;
+    
+    await new Promise((resolve, reject) => {
+      const scannerArgs = [
+        `-Dsonar.projectKey=${projectKey}`,
+        `-Dsonar.sources=.`,
+        `-Dsonar.host.url=${SONAR_HOST_URL}`,
+        `-Dsonar.token=${SONAR_TOKEN}`,
+      ];
+
+      // Add organization for SonarCloud
+      if (SONAR_ORGANIZATION) {
+        scannerArgs.push(`-Dsonar.organization=${SONAR_ORGANIZATION}`);
+      }
+
+      const scanner = spawn("sonar-scanner", scannerArgs, { cwd: repoDir });
+
+      scanner.stdout.on("data", (data) => log(`SonarQube: ${data}`));
+      scanner.stderr.on("data", (data) => log(`SonarQube Error: ${data}`, "ERROR"));
+      scanner.on("close", (code) => {
+        log(`SonarQube scanner exited with code ${code}`);
+        if (code === 0) resolve();
+        else reject(new Error(`SonarQube scanner failed with code ${code}`));
+      });
+    });    // 3. Fetch issues from SonarQube REST API
+    log(`Fetching issues from SonarQube for project: ${projectKey}`);
+    const issuesRes = await axios.get(
+      `${SONAR_HOST_URL}/api/issues/search`,
+      {
+        params: {
+          componentKeys: projectKey,
+          types: "VULNERABILITY,BUG,CODE_SMELL",
+          ps: 500, // page size
+        },
+        headers: {
+          Authorization: `Bearer ${SONAR_TOKEN}`,
+        },
+      }
+    );
+    
+    log(`SonarQube API Response Status: ${issuesRes.status}`);
+    log(`SonarQube API Response Data:`, JSON.stringify(issuesRes.data, null, 2));
+    
+    const issues = issuesRes.data.issues || [];
+    log(`Found ${issues.length} issues from SonarQube`);
+    
+    if (issues.length > 0) {
+      log(`Sample issue:`, JSON.stringify(issues[0], null, 2));
+    }    // 4. Process and format vulnerabilities (convert SonarQube issues to your format)
+    log(`Processing ${issues.length} issues from SonarQube`);
+    const vulnerabilities = await processResultWithAdapter({ issues }, 'sonarqube');// 5. Generate statistics (optional)
+    const stats = getVulnerabilityStats(vulnerabilities);
+    log(`Vulnerability statistics:`, JSON.stringify(stats, null, 2));
+
+    // 6. Determine security state (reuse your logic)
+    const securityState = determineSecurityState(vulnerabilities);
+    log(`Determined security state: ${securityState}`);
+
+    // Log processed vulnerabilities
+    log(`Processed ${vulnerabilities.length} vulnerabilities:`);
+    vulnerabilities.forEach((vuln, index) => {
+      log(`Vulnerability ${index + 1}: ${vuln.cveId} (${vuln.severity}) - ${vuln.description?.substring(0, 100)}...`);
+    });
+
+    // 7. Clean up (optional: remove repoDir if you want)
+    // await fs.rm(repoDir, { recursive: true, force: true });
+
+    // 8. Send results (optional, like image scan)
+    const payload = {
+      eventCode: "CODE_SCAN_COMPLETE",
+      imageName: name + ":" + version,
+      securityState,
+      data: vulnerabilities,
+    };
+
+    log(`Sending payload to ${process.env.API_URL}/webhook/code:`, JSON.stringify(payload, null, 2));
+    await axios.post(`${process.env.API_URL}/webhook/code`, payload);
+    log(`Successfully sent code scan results to webhook`);
+
+    return { success: true, requestId: uuid };
+  } catch (error) {
+    log(`Error during code scan: ${error.message}`, "ERROR");
+    return { success: false, error: error.message, requestId: uuid };
+  }
+}
+
+// Helper function to map SonarQube severity to your format
+function mapSonarSeverity(sonarSeverity) {
+  const severityMap = {
+    'BLOCKER': 'Critical',
+    'CRITICAL': 'Critical', 
+    'MAJOR': 'High',
+    'MINOR': 'Medium',
+    'INFO': 'Low'
+  };
+  return severityMap[sonarSeverity] || 'Unknown';
+}
+
+// ...existing code...
+
+// ...existing code...
+
 app.get("/scan", async (req, res) => {
   try {
-    const { name } = req.query;
+    const { name, scannerType = 'grype' } = req.query;
     if (!name) {
       return res.status(400).json({ error: "Missing image name" });
     }
 
-    const result = await processImageScan(name);
+    log(`Starting ${scannerType} scan for image: ${name}`);
+    const result = await processImageScan(name, scannerType);
     if (result.success) {
       res.json({ 
-        message: `Scanning artifact ${name}...`, 
+        message: `Scanning artifact ${name} with ${scannerType}...`, 
         requestId: result.requestId 
       });
     } else {
@@ -452,6 +865,32 @@ app.get("/scan", async (req, res) => {
     res.status(500).json({ error: "Internal server error" });
   }
 });
+
+
+// Add the new API endpoint
+app.get("/scan/code", async (req, res) => {
+  try {
+    const { name, url, version, scannerType = 'sonarqube' } = req.query;
+    if (!name || !url) {
+      return res.status(400).json({ error: "Missing name or url" });
+    }
+
+    log(`Starting ${scannerType} code scan for: ${name}`);
+    const result = await processCodeScan(name, url, version, scannerType);
+    if (result.success) {
+      res.json({
+        message: `Scanning code repository ${name} with ${scannerType}...`,
+        requestId: result.requestId,
+      });
+    } else {
+      res.status(500).json({ error: result.error, requestId: result.requestId });
+    }
+  } catch (error) {
+    log(`Error processing code scan request: ${error.message}`, "ERROR");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
 
 app.get("/", (req, res) => {
   res.send("Hello World!");

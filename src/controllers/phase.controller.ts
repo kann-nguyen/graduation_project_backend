@@ -22,6 +22,7 @@ import {
 import axios from "axios";
 import { validateArtifact } from "../utils/validateArtifact";
 import scanner from "../routes/scanner";
+import { version } from "os";
 
 // Lấy thông tin chi tiết của một Phase theo ID
 export async function get(req: Request, res: Response) {
@@ -221,11 +222,13 @@ export async function addArtifactToPhase(req: Request, res: Response) {
     }
 
     // Validate artifact before proceeding
-    const validationResult = await validateArtifact(data);
-    if (!validationResult.valid) {
-      console.log(`[ERROR] Artifact validation failed: ${validationResult.error}`);
-      return res.json(errorResponse(validationResult.error || "Artifact validation failed"));
-    }
+    // const validationResult = await validateArtifact(data);
+    
+    // // Set the state based on validation result
+    // data.state = validationResult.valid ? "valid" : "invalid";
+
+    data.state = "valid"; // Default to valid for now
+  
 
     // Fetch vulnerabilities and threats before creating artifact
     if (cpe) { 
@@ -256,19 +259,22 @@ export async function addArtifactToPhase(req: Request, res: Response) {
         id,
         { $addToSet: { artifacts: artifact._id } },
         { new: true }
-      );
+      );      // ✅ Trả về response ngay, để user thấy artifact trong phase
+  
 
-      // ✅ Trả về response ngay, để user thấy artifact trong phase
-      res.json(successResponse(null, "Artifact added to phase and scanning started in background"));
-
-      // ✅ Bắt đầu scan ở background
-      setImmediate(async () => {
-        try {
-          await scanArtifact(artifact, id);
-        } catch (error) {
-          console.error("[ERROR] Scanning failed:", error);
-        }
-      });
+      // ✅ Bắt đầu scan ở background only if artifact is valid
+      if (artifact.state === "valid") {
+        res.json(successResponse(null, "Artifact added to phase and scanning started in background"));
+        setImmediate(async () => {
+          try {
+            await scanArtifact(artifact, id);
+          } catch (error) {
+            console.error("[ERROR] Scanning failed:", error);
+          }
+        });
+      } else {
+        //res.json(successResponse(null, `Artifact added to phase but is not valid${validationResult.error}`));
+      }
 
     } catch (error) {
       console.error("[ERROR] Internal server error", error);
@@ -311,9 +317,78 @@ export async function scanArtifact(artifact: Artifact, phaseId: string) {
     switch (artifact.type) {
       case "docs":
         await scanDocumentInDocker(artifact);
-        break;
-      case "source code":
-        await scanSourceCode(artifact);
+        break;      case "source code":
+        if (scannerIds.length > 0) {
+          console.log(`[INFO] Found ${scannerIds.length} scanner IDs for phase. Will attempt to use them for source code scanning.`);
+          
+          // Fetch and use each scanner by ID
+          for (const scannerId of scannerIds) {
+            // Get the full scanner document by ID
+            const scanner = await ScannerModel.findById(scannerId);
+            
+            if (!scanner) {
+              console.log(`[WARNING] Scanner with ID ${scannerId} not found in database`);
+              continue;
+            }
+            
+            // Now we have the full scanner document with all properties
+            if (scanner.endpoint) {
+              try {
+                console.log(`[INFO] Calling scanner ${scanner.name} at endpoint ${scanner.endpoint}`);
+                
+                // Determine if we need HTTPS agent based on endpoint URL
+                const isHttps = scanner.endpoint.startsWith('https://');
+                let requestConfig: any = {
+                  timeout: 300000, // 30 second timeout
+                };
+                
+                if (isHttps) {
+                  // Create HTTPS agent only for HTTPS endpoints
+                  const https = require('https');
+                  requestConfig.httpsAgent = new https.Agent({
+                    rejectUnauthorized: false // Ignore SSL certificate verification for development
+                  });
+                }
+                
+                // Make the API call to the scanner - use GET with params for compatibility
+                axios.get(`${scanner.endpoint}`, {
+                  params: {
+                    name: `${artifact.name}:${artifact.version}`,
+                    scannerType: scanner.type || 'sonarqube', // Include scanner type
+                  },
+                  ...requestConfig
+                });
+              } catch (error) {
+                if (error instanceof Error) {
+                  console.error(`[ERROR] Failed to call scanner ${scanner.name}:`, error.message);
+                } else {
+                  console.error(`[ERROR] Failed to call scanner ${scanner.name}:`, error);
+                }
+              }
+            } else {
+              console.log(`[WARNING] Scanner ${scanner.name} has no endpoint defined`);
+            }
+          }
+        } else {
+          let url = `${process.env.IMAGE_SCANNING_URL}/scan/code`;
+        
+          // Create a custom HTTPS agent that ignores SSL certificate errors
+          // This is useful for development/testing with ngrok
+          const https = require('https');
+          const httpsAgent = new https.Agent({
+            rejectUnauthorized: false // Ignore SSL certificate verification
+          });
+          
+          await axios.get(url, {
+            params: {
+              name: artifact.name,
+              url: artifact.url, // Include the URL for source code scanning
+              version: artifact.version, // Include the version for source code scanning
+              scannerType: 'sonarqube' // Default scanner type for source code
+            },
+            httpsAgent // Use the custom agent to bypass SSL verification
+          });
+          console.log(`Code scanning triggered for artifact: ${artifact.name}`);        }
         break;
       case "image":
         // If we have scanners in the phase, try to use them first
@@ -335,8 +410,7 @@ export async function scanArtifact(artifact: Artifact, phaseId: string) {
               console.log(`[WARNING] Scanner with ID ${scannerId} not found in database`);
               continue;
             }
-            
-            // Now we have the full scanner document with all properties
+              // Now we have the full scanner document with all properties
             if (scanner.endpoint) {
               try {
                 console.log(`[INFO] Calling scanner ${scanner.name} at endpoint ${scanner.endpoint}`);
@@ -344,6 +418,7 @@ export async function scanArtifact(artifact: Artifact, phaseId: string) {
                 await axios.post(`${scanner.endpoint}`,{
                   params: {
                     name: `${artifact.name}:${artifact.version}`,
+                    scannerType: scanner.type || 'grype', // Include scanner type
                   },
                   httpsAgent
                 });
@@ -368,10 +443,10 @@ export async function scanArtifact(artifact: Artifact, phaseId: string) {
           const httpsAgent = new https.Agent({
             rejectUnauthorized: false // Ignore SSL certificate verification
           });
-          
-          await axios.get(url, {
+            await axios.get(url, {
             params: {
               name: `${artifact.name}:${artifact.version}`,
+              scannerType: 'grype' // Default scanner type for image scanning
             },
             httpsAgent // Use the custom agent to bypass SSL verification
           });

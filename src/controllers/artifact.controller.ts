@@ -9,6 +9,8 @@ import * as fs from "fs/promises";
 import { autoCreateTicketFromThreat, updateTicketStatusForThreat } from "./ticket.controller";
 import { calculateScoresFromVulnerability } from "./threat.controller";
 import { validateArtifact } from "../utils/validateArtifact";
+import { VulnerabilityStandardizer } from "../utils/vulnerabilityStandardizer";
+import { AdapterFactory } from "../utils/adapterFactory";
 
 // Lấy tất cả artifacts thuộc về một project cụ thể
 export async function getAll(req: Request, res: Response) {
@@ -139,10 +141,16 @@ export async function updateRateScan(req: Request, res: Response) {
   }
 }
 
-// Generate a threat from a vulnerability
+// Generate a threat from a standardized vulnerability
 function createThreatFromVuln(vuln: any, artifactType: string): Partial<Threat> {
-  const votes = getVotes(vuln);
-  const threatType = resolveThreatType(votes, artifactType);
+  // Use the threat type from standardization if available, otherwise fall back to voting system
+  let threatType = vuln.threatType;
+  
+  if (!threatType) {
+    // Fall back to original voting system for backward compatibility
+    const votes = getVotes(vuln);
+    threatType = resolveThreatType(votes, artifactType);
+  }
 
   // Calculate initial scores based on vulnerability data
   let scoreData;
@@ -164,12 +172,28 @@ function createThreatFromVuln(vuln: any, artifactType: string): Partial<Threat> 
     };
   }
 
+  // Enhanced threat description with threat category information
+  let description = vuln.description ?? "Have no description";
+  if (vuln.threatCategories && vuln.threatCategories.length > 1) {
+    description += ` (Potential threat types: ${vuln.threatCategories.join(", ")})`;
+  }
+  if (vuln.riskLevel) {
+    description += ` [Risk Level: ${vuln.riskLevel}]`;
+  }
+
   return {
     name: vuln.cveId,
-    description: vuln.description ?? "Have no des",
-    type: threatType ?? "Spoofing",
+    description,
+    type: threatType ?? "Information Disclosure", // Default fallback
     status: "Non mitigated",
     score: scoreData,
+    // Additional metadata for enhanced threat tracking
+    metadata: {
+      threatCategories: vuln.threatCategories || [],
+      riskLevel: vuln.riskLevel || 'UNKNOWN',
+      cvssScore: vuln.score,
+      cwes: vuln.cwes || []
+    }
   };
 }
 
@@ -334,8 +358,8 @@ function mergeVulnerabilities(existingVulns: any[], newVulns: any[]): any[] {
   return merged;
 }
 
-// Hàm xử lý kết quả từ một scanner
-export async function processScannerResult(artifactId: string, vulns: any): Promise<void> {
+// Hàm xử lý kết quả từ một scanner với vulnerability standardization
+export async function processScannerResult(artifactId: string, vulns: any, scannerType?: string): Promise<void> {
   try {
     const artifact = await ArtifactModel.findById(artifactId);
     if (!artifact) {
@@ -343,8 +367,39 @@ export async function processScannerResult(artifactId: string, vulns: any): Prom
       return;
     }
 
-    // Initialize or update tempVuls
-    artifact.tempVuls = mergeVulnerabilities(artifact.tempVuls || [], vulns);
+    // Standardize vulnerabilities if scanner type is provided
+    let standardizedVulns = vulns;
+    if (scannerType && vulns) {
+      console.log(`[INFO] Standardizing ${vulns.length} vulnerabilities from ${scannerType} scanner`);
+      
+      try {
+        const standardizer = new VulnerabilityStandardizer();
+        const adapter = AdapterFactory.getAdapter(scannerType);
+        
+        if (adapter) {
+          // Use adapter to standardize vulnerabilities
+          standardizedVulns = adapter.adapt({ vulnerabilities: vulns, issues: vulns });
+          
+          // Apply threat mapping to each vulnerability
+          standardizedVulns = standardizedVulns.map((vuln: any) => {
+            const enhanced = standardizer.standardizeVulnerability(vuln, scannerType);
+            console.log(`[THREAT MAPPING] ${enhanced.cveId} mapped to threat type: ${enhanced.threatType}`);
+            return enhanced;
+          });
+          
+          console.log(`[SUCCESS] Standardized ${standardizedVulns.length} vulnerabilities with threat mappings`);
+        } else {
+          console.log(`[WARNING] No adapter found for scanner type: ${scannerType}, using raw vulnerabilities`);
+        }
+      } catch (error) {
+        console.error(`[ERROR] Failed to standardize vulnerabilities: ${error}`, error);
+        // Fall back to original vulnerabilities if standardization fails
+        standardizedVulns = vulns;
+      }
+    }
+
+    // Initialize or update tempVuls with standardized vulnerabilities
+    artifact.tempVuls = mergeVulnerabilities(artifact.tempVuls || [], standardizedVulns);
 
     // Increment completed scanners count
     artifact.scannersCompleted = (artifact.scannersCompleted || 0) + 1;
