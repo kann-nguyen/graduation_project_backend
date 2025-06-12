@@ -157,9 +157,8 @@ function getEnhancedThreatContext(threatType: string, vulnerability: any = null)
     commonAttackVectors: [],
     securityPrinciples: []
   };
-  
-  // Adjust context based on CVSS vector if available
-  if (vulnerability.cvssVector) {
+    // Adjust context based on CVSS vector if available
+  if (vulnerability && vulnerability.cvssVector) {
     const vectorAdjustments = getAdjustmentsFromCVSSVector(vulnerability.cvssVector, threatType);
     
     if (vectorAdjustments.attackVectors.length > 0) {

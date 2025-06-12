@@ -70,12 +70,12 @@ export class Artifact extends TimeStamps {
   @prop({ default: 50 })
   public rateReScan?: number; // số lượng threat đã xử lý (submit)
 
-  @prop({ default: 0, select: false })
+  @prop({ default: 0})
   public scannersCompleted?: number; // số lượng scanner đã hoàn thành
 
-  @prop({ default: 0,select: false  })
+  @prop({ default: 0})
   public totalScanners?: number; // tổng số scanner cần chạy
-  @prop({ default: false, select: false })
+  @prop({ default: false})
   public isScanning?: boolean; // trạng thái đang quét hay không
     @prop({ select: false, type: () => [Vulnerability] }) // không lưu trong DB
   public tempVuls?: ArraySubDocumentType<Vulnerability>[]; // danh sách vuln tạm thời từ scanner

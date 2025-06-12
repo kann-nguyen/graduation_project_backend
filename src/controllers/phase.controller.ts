@@ -10,7 +10,7 @@ import {
   TicketModel,
   UserModel,
 } from "../models/models";
-import { errorResponse, successResponse } from "../utils/responseFormat";
+import { errorResponse, successResponse, handleScanningError } from "../utils/responseFormat";
 import {
   fetchVulnsFromNVD,
 } from "../utils/vuln";
@@ -204,24 +204,33 @@ export async function addArtifactToPhase(req: Request, res: Response) {
   const accountId = req.user?._id;
   console.log("AccountId: " + accountId);
 
-  let user = null;
   try {
     // Find user with this account ID
-    if (accountId) {
-      user = await UserModel.findOne({ account: accountId });
-      console.log("Looking for user with account ID:", accountId);
+    if (!accountId) {
+      return res.json(errorResponse("User not authenticated"));
     }
-    
+
+    const user = await UserModel.findOne({ account: accountId });
     if (!user) {
       return res.json(errorResponse("User not found"));
     }
     
-    data.projectId = user.projectIn[0]?.toString() || "";
-      // Check if projectId exists
-    if (!data.projectId) {
-      console.log("No project associated with user");
-      return res.json(errorResponse("No project associated with user"));
+    // Find the project that contains this phase (correct approach)
+    const project = await ProjectModel.findOne({ phaseList: id });
+    if (!project) {
+      console.log("No project found containing phase ID:", id);
+      return res.json(errorResponse("Project containing this phase not found"));
     }
+    
+    // Verify that the user is a member of this project
+    if (!user.projectIn.includes(project._id)) {
+      console.log("User is not a member of the project containing this phase");
+      return res.json(errorResponse("User is not authorized to add artifacts to this phase"));
+    }
+    
+    // Set the correct project ID based on the phase's parent project
+    data.projectId = project._id.toString();
+    console.log("Setting projectId to:", data.projectId, "for project:", project.name);
     
     // Validate artifact before proceeding
     const validationResult = await validateArtifact(data);
@@ -249,7 +258,22 @@ export async function addArtifactToPhase(req: Request, res: Response) {
         data.threatList = [];
       }
     }    try {
+      // Get the phase to determine scanner count before creating artifact
+      const phase = await PhaseModel.findById(id);
+      const scannerCount = phase?.scanners?.length || 0;
+      
+      console.log(`[DEBUG] Phase ${id} has ${scannerCount} scanners`);
+      
+      // Initialize scanning-related fields
+      data.totalScanners = Math.max(scannerCount, 1);
+      data.scannersCompleted = 0;
+      data.isScanning = false; // Will be set to true when scanning starts
+      
+      console.log(`[DEBUG] Setting totalScanners to: ${data.totalScanners}, scannersCompleted to: ${data.scannersCompleted}`);
+
       const artifact = await ArtifactModel.create(data);
+      
+      console.log(`[DEBUG] Created artifact ${artifact._id} with totalScanners: ${artifact.totalScanners}, scannersCompleted: ${artifact.scannersCompleted}`);
 
       // ✅ Thêm artifact vào phase ngay lập tức
       await PhaseModel.findByIdAndUpdate(
@@ -296,21 +320,24 @@ export async function scanArtifact(artifact: Artifact, phaseId: string) {
   
   // Get scanner IDs from the phase
   const scannerIds = phase.scanners || [];
-  console.log(`[INFO] Found ${scannerIds.length} scanner references in phase`);
 
   const artifactImage = await ArtifactModel.findById(artifact._id);
   if (!artifactImage) {
     console.error("[ERROR] Artifact not found in the database");
     return;
   }
-  
+
   // Skip scanning if the artifact is invalid
   if (artifactImage.state === "invalid") {
     console.log(`[INFO] Skipping scanning for invalid artifact: ${artifact.name}`);
     return;
   }
 
-  artifactImage.totalScanners = Math.max(scannerIds.length, 1);
+  // Update scanning state - reset totalScanners for rescans or set initially
+  if (artifactImage.totalScanners === undefined || artifactImage.totalScanners === null || artifactImage.totalScanners === 0) {
+    artifactImage.totalScanners = Math.max(scannerIds.length, 1);
+    console.log(`[DEBUG] Setting totalScanners to ${artifactImage.totalScanners} for artifact ${artifact.name}`);
+  }
   artifactImage.scannersCompleted = 0;
   artifactImage.isScanning = true; // Set scanning flag to true
   await artifactImage.save();
@@ -323,30 +350,34 @@ export async function scanArtifact(artifact: Artifact, phaseId: string) {
         break;
       case "source code":
         await scanSourceCode(artifact);
-        break;
-      case "image":        // If we have scanners in the phase, try to use them first
+        break;      case "image":
+        // If we have scanners in the phase, try to use them first
         if (scannerIds.length > 0) {
           console.log(`[INFO] Found ${scannerIds.length} scanner IDs for phase. Will attempt to use them for image scanning.`);
+          console.log(`[DEBUG] Scanner IDs: ${scannerIds.join(', ')}`);
           
-          // Fetch and use each scanner by ID
-          for (const scannerId of scannerIds) {
+          // Process all scanners in parallel using Promise.allSettled
+          const scannerPromises = scannerIds.map(async (scannerId, index) => {
+            console.log(`[DEBUG] Processing scanner ${index + 1}/${scannerIds.length} with ID: ${scannerId}`);
+            
             // Get the full scanner document by ID
             const scanner = await ScannerModel.findById(scannerId);
             
             if (!scanner) {
               console.log(`[WARNING] Scanner with ID ${scannerId} not found in database`);
-              continue;
+              return { status: 'error', reason: 'Scanner not found' };
             }
+            
+            console.log(`[DEBUG] Found scanner: ${scanner.name} with endpoint: ${scanner.endpoint}`);
             
             // Now we have the full scanner document with all properties
             if (scanner.endpoint) {
               try {
                 console.log(`[INFO] Calling scanner ${scanner.name} at endpoint ${scanner.endpoint}`);
-                
                 // Determine if we need HTTPS agent based on endpoint URL
                 const isHttps = scanner.endpoint.startsWith('https://');
                 let requestConfig: any = {
-                  timeout: 300000, // 30 second timeout
+                  timeout: 600000, // 10 minute timeout (increased from 5 minutes)
                 };
                 
                 if (isHttps) {
@@ -358,26 +389,52 @@ export async function scanArtifact(artifact: Artifact, phaseId: string) {
                 }
                 
                 // Make the API call to the scanner - use GET with params for compatibility
-                axios.get(`${scanner.endpoint}`, {
+                const response = await axios.get(`${scanner.endpoint}`, {
                   params: {
                     name: `${artifact.name}:${artifact.version}`,
                   },
                   ...requestConfig
                 });
+                
+                console.log(`[SUCCESS] Scanner ${scanner.name} responded with status: ${response.status}`);
+                return { status: 'success', value: response };
               } catch (error) {
                 if (error instanceof Error) {
-                  console.error(`[ERROR] Failed to call scanner ${scanner.name}:`, error.message);
+                  // Handle timeout specifically
+                  if (error.message.includes('timeout') || (error as any).code === 'ECONNABORTED') {
+                    console.error(`[TIMEOUT] Scanner ${scanner.name} timed out after 10 minutes. This is expected for large scans.`);
+                    console.log(`[INFO] Scan is still running in background for ${scanner.name}. Results will be sent via webhook when complete.`);
+                  } else {
+                    console.error(`[ERROR] Failed to call scanner ${scanner.name}:`, error.message);
+                  }
                 } else {
                   console.error(`[ERROR] Failed to call scanner ${scanner.name}:`, error);
                 }
+                // Don't re-throw the error - let the scanning continue in background
+                return { status: 'rejected', reason: error };
               }
             } else {
               console.log(`[WARNING] Scanner ${scanner.name} has no endpoint defined`);
+              return { status: 'rejected', reason: 'No endpoint defined' };
             }
-          }
+          });
+
+          // Wait for all scanner calls to complete (either fulfill or reject)
+          const results = await Promise.allSettled(scannerPromises);
+          
+          // Log the results
+          results.forEach((result, index) => {
+            const scannerId = scannerIds[index];
+            if (result.status === 'fulfilled') {
+              console.log(`[DEBUG] Scanner ${index + 1} (ID: ${scannerId}) completed successfully`);
+            } else {
+              console.log(`[DEBUG] Scanner ${index + 1} (ID: ${scannerId}) failed or was rejected: ${result.reason}`);
+            }
+          });
+
+          console.log(`[INFO] Completed processing all ${scannerIds.length} scanners for image scanning`);
         } else {
           let url = `${process.env.IMAGE_SCANNING_URL}/scan`;
-        
           // Create a custom HTTPS agent that ignores SSL certificate errors
           // This is useful for development/testing with ngrok
           const https = require('https');
@@ -385,13 +442,29 @@ export async function scanArtifact(artifact: Artifact, phaseId: string) {
             rejectUnauthorized: false // Ignore SSL certificate verification
           });
           
-          await axios.get(url, {
-            params: {
-              name: `${artifact.name}:${artifact.version}`,
-            },
-            httpsAgent // Use the custom agent to bypass SSL verification
-          });
-          console.log(`Image scanning triggered for artifact: ${artifact.name}`);
+          try {
+            const response = await axios.get(url, {
+              params: {
+                name: `${artifact.name}:${artifact.version}`,
+              },
+              timeout: 600000, // 10 minute timeout (increased from default)
+              httpsAgent // Use the custom agent to bypass SSL verification
+            });
+            console.log(`[SUCCESS] Image scanning triggered for artifact: ${artifact.name}, status: ${response.status}`);
+          } catch (error) {
+            if (error instanceof Error) {
+              // Handle timeout specifically
+              if (error.message.includes('timeout') || (error as any).code === 'ECONNABORTED') {
+                console.error(`[TIMEOUT] Default scanner timed out after 10 minutes for artifact: ${artifact.name}. This is expected for large scans.`);
+                console.log(`[INFO] Scan is still running in background. Results will be sent via webhook when complete.`);
+              } else {
+                console.error(`[ERROR] Failed to call default scanner:`, error.message);
+              }
+            } else {
+              console.error(`[ERROR] Failed to call default scanner:`, error);
+            }
+            // Don't re-throw the error - let the scanning continue in background
+          }
         }
         break;
       default:
@@ -402,12 +475,28 @@ export async function scanArtifact(artifact: Artifact, phaseId: string) {
     // In case of error, reset scanning state
     artifactImage.isScanning = false;
     await artifactImage.save();
-    console.error("[ERROR] Scanning failed:", error);
+    
+    // Handle different types of errors appropriately
+    if (error instanceof Error) {
+      if (error.message.includes('timeout') || (error as any).code === 'ECONNABORTED') {
+        console.error(`[TIMEOUT] Scanning operation timed out for artifact: ${artifact.name}. Scan may still be running in background.`);
+      } else {
+        console.error(`[ERROR] Scanning failed for artifact: ${artifact.name}:`, error.message);
+      }
+    } else {
+      console.error(`[ERROR] Scanning failed for artifact: ${artifact.name}:`, error);
+    }
+    // Don't re-throw the error to prevent app crash
   } finally {
-    // Set scanning flag to false when all scanning is done
-    artifactImage.isScanning = false;
-    await artifactImage.save();
-    console.log(`[INFO] Scanning completed for artifact: ${artifact.name}`);
+    // Only set scanning flag to false for synchronous operations (docs, source code)
+    // For async operations (image scanning), the flag will be reset when all scanner results are received
+    if (artifact.type === "docs" || artifact.type === "source code") {
+      artifactImage.isScanning = false;
+      await artifactImage.save();
+      console.log(`[INFO] Scanning completed for artifact: ${artifact.name}`);
+    } else {
+      console.log(`[INFO] Async scanning initiated for artifact: ${artifact.name}. Status will be updated when all scanners complete.`);
+    }
   }
 }
 

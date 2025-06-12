@@ -352,19 +352,23 @@ export async function updateGitlabAccessToken(req: Request, res: Response) {
 //xóa kết nối github
 export async function disconnectFromGithub(req: Request, res: Response) {
   const account = req.user;
-  try {
-    const acc = await AccountModel.findByIdAndUpdate(account?._id, {
+  try {    const acc = await AccountModel.findByIdAndUpdate(account?._id, {
       $pull: {
         thirdParty: {
           name: "Github",
         },
       },
     });
+    
+    if (!acc) {
+      return res.json(errorResponse("Account not found"));
+    }
+    
     await ChangeHistoryModel.create({
-      objectId: acc?._id,
+      objectId: acc._id,
       action: "update",
       timestamp: Date.now(),
-      description: `Account ${acc?.username} disconnects from Github`,
+      description: `Account ${acc.username} disconnects from Github`,
       account: req.user?._id,
     });
     return res.json(successResponse(null, "Github disconnected"));
@@ -405,9 +409,7 @@ export async function updateScannerPreference(req: Request, res: Response) {
 
   try {
     // Tìm máy quét trong database dựa vào tên scannerName
-    const scanner = await ScannerModel.findOne({ name: scannerName });
-
-    // Cập nhật thông tin máy quét cho tài khoản
+    const scanner = await ScannerModel.findOne({ name: scannerName });    // Cập nhật thông tin máy quét cho tài khoản
     const acc = await AccountModel.findByIdAndUpdate(id, {
       scanner: {
         endpoint, // Cập nhật endpoint mới của máy quét
@@ -415,12 +417,16 @@ export async function updateScannerPreference(req: Request, res: Response) {
       },
     });
 
+    if (!acc) {
+      return res.json(errorResponse("Account not found"));
+    }
+
     // Ghi lại lịch sử thay đổi vào bảng ChangeHistoryModel
     await ChangeHistoryModel.create({
-      objectId: acc?._id, // ID của tài khoản vừa cập nhật
+      objectId: acc._id, // ID của tài khoản vừa cập nhật (now safe to access)
       action: "update", // Hành động là "update"
       timestamp: Date.now(), // Ghi lại thời gian cập nhật
-      description: `Account ${acc?.username} scanner preference is updated`, // Mô tả thay đổi
+      description: `Account ${acc.username} scanner preference is updated`, // Mô tả thay đổi
       account: req.user?._id, // Người thực hiện thay đổi
     });
 

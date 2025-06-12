@@ -1,6 +1,6 @@
 import { Request, Response } from "express";
 import { ArtifactModel, ChangeHistoryModel, ScannerModel } from "../models/models";
-import { errorResponse, successResponse } from "../utils/responseFormat";
+import { errorResponse, successResponse, handleScanningError } from "../utils/responseFormat";
 import {
   generateDockerfile,
   sampleCode,
@@ -137,17 +137,41 @@ export async function update(req: Request, res: Response) {
 // Function to call the Dockerized document scanning service
 export async function scanDocumentInDocker(artifact: Artifact) {
   try {
-    const response = await axios.post('http://localhost:4000/docs', { artifact });
+    const response = await axios.post('http://localhost:4000/docs', { 
+      artifact,
+    }, {
+      timeout: 600000, // 10 minute timeout
+    });
+    console.log(`[SUCCESS] Document scanning completed for ${artifact.name}, status: ${response.status}`);
   } catch (error) {
-    console.error("[ERROR] Failed to scan document:", error);
+    const errorInfo = handleScanningError(error, `Document scanning for ${artifact.name}`);
+    
+    if (errorInfo.isTimeout) {
+      console.error(`[TIMEOUT] ${errorInfo.message}`);
+      console.log(`[INFO] Document scan may still be running in background. Results will be sent via webhook when complete.`);
+    } else {
+      console.error(`[ERROR] ${errorInfo.message}`);
+    }
+    // Don't re-throw the error to prevent app crash
   }
 }
 
 export async function scanSourceCode(artifact: Artifact) {
   try {
-    await axios.post('http://localhost:5000/source', artifact.url);
+    const response = await axios.post('http://localhost:5000/source', artifact.url, {
+      timeout: 600000, // 10 minute timeout
+    });
+    console.log(`[SUCCESS] Source code scanning completed for ${artifact.name}, status: ${response.status}`);
   } catch (error) {
-    console.error("[ERROR] Failed to scan document:", error);
+    const errorInfo = handleScanningError(error, `Source code scanning for ${artifact.name}`);
+    
+    if (errorInfo.isTimeout) {
+      console.error(`[TIMEOUT] ${errorInfo.message}`);
+      console.log(`[INFO] Source code scan may still be running in background. Results will be sent via webhook when complete.`);
+    } else {
+      console.error(`[ERROR] ${errorInfo.message}`);
+    }
+    // Don't re-throw the error to prevent app crash
   }
 }
 

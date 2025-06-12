@@ -90,9 +90,7 @@ export async function update(req: Request, res: Response) {
 
     if (!artifact) {
       return res.json(errorResponse("Artifact not found"));
-    }
-
-    // Find the phase that contains this artifact
+    }    // Find the phase that contains this artifact
     const phase = await PhaseModel.findOne({ artifacts: artifact._id });
     
     if (!phase) {
@@ -104,7 +102,12 @@ export async function update(req: Request, res: Response) {
       res.json(successResponse(null, "Artifact updated successfully and scanning started in background"));
       setImmediate(async () => {
         try {
-          await scanArtifact(artifact, phase._id.toString());
+          // Ensure phase and phase._id exist before calling scanArtifact
+          if (phase && phase._id) {
+            await scanArtifact(artifact, phase._id.toString());
+          } else {
+            console.error("[ERROR] Phase or phase._id is null/undefined during scanning");
+          }
         } catch (error) {
           console.error("[ERROR] Scanning failed:", error);
         }
@@ -358,18 +361,23 @@ export async function processScannerResult(artifactId: string, vulns: any): Prom
       return;
     }
 
+    console.log(`[DEBUG] Processing scanner result for artifact ${artifactId}`);
+    console.log(`[DEBUG] Current artifact.totalScanners: ${artifact.totalScanners}`);
+    console.log(`[DEBUG] Current artifact.scannersCompleted: ${artifact.scannersCompleted}`);
+    console.log(`[DEBUG] Current artifact.isScanning: ${artifact.isScanning}`);
+
     // Initialize or update tempVuls
     artifact.tempVuls = mergeVulnerabilities(artifact.tempVuls || [], vulns);
 
     // Increment completed scanners count
     artifact.scannersCompleted = (artifact.scannersCompleted || 0) + 1;
 
-    // Check if all scanners have completed
+    console.log(`Scanner result processed for artifact ${artifactId}. Total completed scanners: ${artifact.scannersCompleted} of ${artifact.totalScanners}`);    // Check if all scanners have completed
     if (artifact.scannersCompleted >= (artifact.totalScanners ?? 1)) {
       await updateArtifactAfterScan(artifact);
-      // Reset counters and scanning state
+      // Reset counters and scanning state - but don't reset totalScanners to 0
       artifact.scannersCompleted = 0;
-      artifact.totalScanners = 0;
+      // Keep totalScanners for potential rescans - don't reset to 0
       artifact.isScanning = false;
     }
 
