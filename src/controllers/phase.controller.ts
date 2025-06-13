@@ -333,11 +333,8 @@ export async function scanArtifact(artifact: Artifact, phaseId: string) {
     return;
   }
 
-  // Update scanning state - reset totalScanners for rescans or set initially
-  if (artifactImage.totalScanners === undefined || artifactImage.totalScanners === null || artifactImage.totalScanners === 0) {
-    artifactImage.totalScanners = Math.max(scannerIds.length, 1);
-    console.log(`[DEBUG] Setting totalScanners to ${artifactImage.totalScanners} for artifact ${artifact.name}`);
-  }
+  artifactImage.totalScanners = Math.max(scannerIds.length, 1);
+  console.log(`[DEBUG] Setting totalScanners to ${artifactImage.totalScanners} for artifact ${artifact.name}`);
   artifactImage.scannersCompleted = 0;
   artifactImage.isScanning = true; // Set scanning flag to true
   await artifactImage.save();

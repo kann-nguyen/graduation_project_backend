@@ -377,6 +377,7 @@ export async function processScannerResult(artifactId: string, vulns: any): Prom
       await updateArtifactAfterScan(artifact);
       // Reset counters and scanning state - but don't reset totalScanners to 0
       artifact.scannersCompleted = 0;
+      artifact.totalScanners = 0; // Keep totalScanners as is
       // Keep totalScanners for potential rescans - don't reset to 0
       artifact.isScanning = false;
     }

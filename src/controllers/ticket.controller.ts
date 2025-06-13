@@ -457,15 +457,25 @@ export async function suggestAssigneeFromThreatType(projectId: string, threatTyp
     }
   }
 
-
   async function handleTicketSubmitted(ticketId: string) {
     const ticket = await TicketModel.findById(ticketId).populate("artifactId targetedThreat");
 
-    if (!ticket) return;
+    if (!ticket) {
+      console.log(`[DEBUG] Ticket ${ticketId} not found`);
+      return;
+    }
 
     const artifact = await ArtifactModel.findById(ticket.artifactId);
 
-    if (!artifact) return;
+    if (!artifact) {
+      console.log(`[DEBUG] Artifact ${ticket.artifactId} not found`);
+      return;
+    }
+
+    console.log(`[DEBUG] Processing ticket submission for artifact ${artifact._id}`);
+    console.log(`[DEBUG] Current numberThreatSubmitted: ${artifact.numberThreatSubmitted || 0}`);
+    console.log(`[DEBUG] Total threats: ${artifact.threatList?.length || 0}`);
+    console.log(`[DEBUG] Current totalScanners: ${artifact.totalScanners ?? 0}`);
 
     // Cộng số lượng threat đã được submit
     artifact.numberThreatSubmitted = (artifact.numberThreatSubmitted || 0) + 1;
@@ -473,11 +483,18 @@ export async function suggestAssigneeFromThreatType(projectId: string, threatTyp
 
     // Check tỷ lệ threat đã submit
     const totalThreat = artifact.threatList?.length || 0;
-    const submittedRatio = (artifact.numberThreatSubmitted || 0) / totalThreat * 100; // Tỷ lệ phần trăm đã submit
+    const submittedRatio = totalThreat > 0 ? (artifact.numberThreatSubmitted || 0) / totalThreat * 100 : 0;
 
-    const managerConfigThreshold = artifact.rateReScan || 50; // Ví dụ Manager yêu cầu xử lý 50% threat
-    //add log to check rescan
+    const managerConfigThreshold = artifact.rateReScan || 50;
+    
+    console.log(`[DEBUG] Updated numberThreatSubmitted: ${artifact.numberThreatSubmitted}`);
+    console.log(`[DEBUG] Submitted ratio: ${submittedRatio.toFixed(2)}%`);
+    console.log(`[DEBUG] Manager threshold: ${managerConfigThreshold}%`);
+    console.log(`[DEBUG] Should trigger rescan: ${submittedRatio >= managerConfigThreshold && (artifact.totalScanners ?? 0) <= 0}`);
+
     if (submittedRatio >= managerConfigThreshold && (artifact.totalScanners ?? 0) <= 0) {
+      console.log(`[INFO] Triggering rescan for artifact ${artifact._id}`);
+      
       // Find the phase that contains this artifact
       const phase = await PhaseModel.findOne({ artifacts: artifact._id });
       if (!phase) {
@@ -485,14 +502,28 @@ export async function suggestAssigneeFromThreatType(projectId: string, threatTyp
         return;
       }
 
+      console.log(`[INFO] Found phase ${phase._id} for artifact ${artifact._id}`);
+
+      // Update totalScanners to prevent multiple scans
+      await ArtifactModel.findByIdAndUpdate(artifact._id, { 
+        $set: { totalScanners: 1 } 
+      });
+
       // Trigger quét lại artifact với phase ID thực
-      // ✅ Bắt đầu scan ở background
-    setImmediate(async () => {
-      try {
-        await scanArtifact(artifact, phase._id.toString());
-      } catch (error) {
-        console.error("[ERROR] Scanning failed:", error);
-      }
-    });
+      setImmediate(async () => {
+        try {
+          console.log(`[INFO] Starting background scan for artifact ${artifact._id}`);
+          await scanArtifact(artifact, phase._id.toString());
+          console.log(`[SUCCESS] Background scan completed for artifact ${artifact._id}`);
+        } catch (error) {
+          console.error(`[ERROR] Scanning failed for artifact ${artifact._id}:`, error);
+          // Reset totalScanners on failure
+          await ArtifactModel.findByIdAndUpdate(artifact._id, { 
+            $set: { totalScanners: 0 } 
+          });
+        }
+      });
+    } else {
+      console.log(`[INFO] Rescan not triggered - ratio: ${submittedRatio.toFixed(2)}%, threshold: ${managerConfigThreshold}%, scanners: ${artifact.totalScanners ?? 0}`);
     }
   }
