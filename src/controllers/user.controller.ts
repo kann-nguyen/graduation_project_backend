@@ -161,3 +161,34 @@ export async function getAllUsers(req: Request, res: Response) {
     return res.json(errorResponse(`Internal server error: ${error}`));
   }
 }
+
+/**
+ * Admin-specific user update function with skills management
+ * @param {Request} req - Request from admin containing user updates
+ * @param {Response} res - Response confirming update success or error
+ * @returns {Promise<Response>} - JSON response
+ */
+export async function adminUpdateUser(req: Request, res: Response) {
+  const { id } = req.params;
+  const { name, skills } = req.body;
+  
+  try {
+    // Update user data including skills
+    const updatedUser = await UserModel.findByIdAndUpdate(
+      id,
+      { 
+        ...(name && { name }),
+        ...(skills && { skills })
+      },
+      { new: true }
+    ).populate("account");
+    
+    if (!updatedUser) {
+      return res.json(errorResponse("User not found"));
+    }
+    
+    return res.json(successResponse(updatedUser, "User updated successfully"));
+  } catch (error) {
+    return res.json(errorResponse(`Internal server error: ${error}`));
+  }
+}
