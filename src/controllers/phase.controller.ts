@@ -22,6 +22,7 @@ import {
 import axios from "axios";
 import { validateArtifact } from "../utils/validateArtifact";
 import scanner from "../routes/scanner";
+import { ArtifactWorkflowController } from "./artifactWorkflow.controller";
 
 // Lấy thông tin chi tiết của một Phase theo ID
 export async function get(req: Request, res: Response) {
@@ -269,9 +270,7 @@ export async function addArtifactToPhase(req: Request, res: Response) {
       data.scannersCompleted = 0;
       data.isScanning = false; // Will be set to true when scanning starts
       
-      console.log(`[DEBUG] Setting totalScanners to: ${data.totalScanners}, scannersCompleted to: ${data.scannersCompleted}`);
-
-      const artifact = await ArtifactModel.create(data);
+      console.log(`[DEBUG] Setting totalScanners to: ${data.totalScanners}, scannersCompleted to: ${data.scannersCompleted}`);      const artifact = await ArtifactModel.create(data);
       
       console.log(`[DEBUG] Created artifact ${artifact._id} with totalScanners: ${artifact.totalScanners}, scannersCompleted: ${artifact.scannersCompleted}`);
 
@@ -280,7 +279,14 @@ export async function addArtifactToPhase(req: Request, res: Response) {
         id,
         { $addToSet: { artifacts: artifact._id } },
         { new: true }
-      );      // ✅ Trả về response ngay, để user thấy artifact trong phase
+      );
+      
+      // ✅ Initialize workflow cycle for the artifact
+      try {
+        await ArtifactWorkflowController.updateWorkflowStatus(artifact._id, 1);
+      } catch (workflowError) {
+        console.error(`[ERROR] Failed to initialize workflow:`, workflowError);
+      }
   
 
       // ✅ Bắt đầu scan ở background only if artifact is valid

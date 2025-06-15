@@ -10,6 +10,7 @@ import { autoCreateTicketFromThreat, updateTicketStatusForThreat } from "./ticke
 import { calculateScoresFromVulnerability } from "./threat.controller";
 import { validateArtifact } from "../utils/validateArtifact";
 import { scanArtifact } from "./phase.controller";
+import { ArtifactWorkflowController } from "./artifactWorkflow.controller";
 
 // Lấy tất cả artifacts thuộc về một project cụ thể
 export async function getAll(req: Request, res: Response) {
@@ -72,7 +73,7 @@ export async function update(req: Request, res: Response) {
 
   // Validate artifact before proceeding
   const validationResult = await validateArtifact(data);
-  
+
   // Set the state based on validation result
   data.state = validationResult.valid ? "valid" : "invalid";
 
@@ -92,7 +93,7 @@ export async function update(req: Request, res: Response) {
       return res.json(errorResponse("Artifact not found"));
     }    // Find the phase that contains this artifact
     const phase = await PhaseModel.findOne({ artifacts: artifact._id });
-    
+
     if (!phase) {
       return res.json(errorResponse("Phase containing this artifact not found"));
     }
@@ -374,12 +375,10 @@ export async function processScannerResult(artifactId: string, vulns: any): Prom
 
     console.log(`Scanner result processed for artifact ${artifactId}. Total completed scanners: ${artifact.scannersCompleted} of ${artifact.totalScanners}`);    // Check if all scanners have completed
     if (artifact.scannersCompleted >= (artifact.totalScanners ?? 1)) {
-      await updateArtifactAfterScan(artifact);
-      // Reset counters and scanning state - but don't reset totalScanners to 0
       artifact.scannersCompleted = 0;
-      artifact.totalScanners = 0; // Keep totalScanners as is
-      // Keep totalScanners for potential rescans - don't reset to 0
+      artifact.totalScanners = 0;
       artifact.isScanning = false;
+      await updateArtifactAfterScan(artifact);
     }
 
     await artifact.save();
@@ -428,7 +427,14 @@ async function processExistingThreats(artifact: any): Promise<void> {
       console.log(`Threat ${threat._id} bị xóa vì không tìm thấy vulnerability tương ứng.`);
     }
   }
-  
+
+  try {
+    await ArtifactWorkflowController.updateWorkflowStatus(artifact._id, 5);
+  } catch (workflowError) {
+    console.error(`[ERROR] Failed to update workflow status:`, workflowError);
+    // Don't throw error here, as we don't want to block ticket update
+  }
+
   // Loại bỏ các threat đã bị xóa khỏi artifact.threatList (không xóa khỏi database)
   artifact.threatList = artifact.threatList.filter(
     (t: any) => !threatsToRemove.some((removeId: any) => removeId.toString() === t._id.toString())
@@ -442,17 +448,25 @@ async function processExistingThreats(artifact: any): Promise<void> {
  * thì tạo threat mới và thêm vào artifact.threatList.
  */
 async function processNewVulnerabilities(artifact: any): Promise<void> {
+  let threatCount = 0;
+
   for (const newVul of artifact.tempVuls || []) {
     // Kiểm tra nếu vulnerability này chưa tồn tại trong artifact.vulnerabilityList
     const exists = artifact.vulnerabilityList?.some(
       (oldVul: any) => oldVul.cveId === newVul.cveId
     );
     if (!exists) {
+      // Create threat with vulnerability data
       const threatData = createThreatFromVuln(newVul, artifact.type);
       const createdThreat = await ThreatModel.create(threatData);
+
+      // Add to artifact threat list
       artifact.threatList.push(createdThreat._id);
-      autoCreateTicketFromThreat(artifact._id, createdThreat._id);
-      console.log(`Threat mới được tạo cho vulnerability ${newVul.cveId}`);
+
+      // Create ticket for the threat
+      await autoCreateTicketFromThreat(artifact._id, createdThreat._id);
+
+      threatCount++;
     }
   }
 }
@@ -484,13 +498,19 @@ export async function updateArtifactAfterScan(artifact: any): Promise<void> {
       });
 
       console.log(`Added scan history entry with ${artifact.tempVuls.length} vulnerabilities`);
-    }
-
-    // 4. Gán lại vulnerabilityList bằng tempVuls và lưu artifact
+    }    // 4. Gán lại vulnerabilityList bằng tempVuls và lưu artifact
     artifact.vulnerabilityList = artifact.tempVuls || [];
     artifact.tempVuls = [];
     await artifact.save();
     console.log(`Artifact ${artifact._id} đã được cập nhật với vulnerabilityList mới từ tempVuls.`);
+
+    // 5. Update workflow status based on scan results
+    try {
+      await ArtifactWorkflowController.updateWorkflowStatus(artifact._id, 1);
+      await ArtifactWorkflowController.updateWorkflowStatus(artifact._id, 2);
+    } catch (workflowError) {
+      console.error(`[ERROR] Failed to update workflow status:`, workflowError);
+    }
   } catch (error) {
     console.error("Lỗi khi cập nhật artifact sau scan:", error);
     throw error;
@@ -530,7 +550,7 @@ export async function getPhaseForArtifact(req: Request, res: Response) {
   try {
     // Find the phase that contains this artifact
     const phase = await PhaseModel.findOne({ artifacts: id }).select('_id name');
-    
+
     if (!phase) {
       return res.json(errorResponse("Phase containing this artifact not found"));
     }
