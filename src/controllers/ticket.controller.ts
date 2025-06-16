@@ -110,11 +110,16 @@ export async function create(req: Request, res: Response) {
       }
     }
 
+    // Set initial status and make sure previousStatus is the same as initial status
+    const initialStatus = data.status || "Not accepted";
+    
     const ticket = await TicketModel.create({
       ...data,
       targetedThreat: data.targetedThreat,
       assignee: assigneeId,
       assigner: user._id,
+      status: initialStatus,
+      previousStatus: initialStatus // Set previousStatus to same as initial status
     });
 
     if (submit && data.assignee && data.assignee.trim().length > 0) {
@@ -166,6 +171,9 @@ export async function autoCreateTicketFromThreat(artifactId: any, threatId: any)
     const suggested = await suggestAssigneeFromThreatType(artifact.projectId.toString(), threat.type);
     const project = await ProjectModel.findById(artifact.projectId);
 
+    // Set initial status for auto-created tickets
+    const initialStatus = "Not accepted";
+
     const ticket = await TicketModel.create({
       title: `Ticket for Threat ${threat.name}`,
       description: `Automatically generated ticket for ${threat.name} threats.`,
@@ -174,7 +182,8 @@ export async function autoCreateTicketFromThreat(artifactId: any, threatId: any)
       artifactId: artifactId,
       projectName: project?.name || "Unknown Project",
       targetedThreat: threatId,
-      status: "Not accepted",
+      status: initialStatus,
+      previousStatus: initialStatus, // Set previousStatus same as initial status
       priority: priority,
     });
 
@@ -239,12 +248,16 @@ export async function updateState(req: Request, res: Response) {
       return res.json(errorResponse("Invalid status transition"));
     }
 
+    // Save the current status as previousStatus before updating
+    const previousStatus = currentTicket.status;
+
     // Update the ticket if permissions check passed
     const ticket = await TicketModel.findOneAndUpdate(
       { _id: ticketId },
       {
         $set: {
-          status: data.status
+          status: data.status,
+          previousStatus: previousStatus // Store the previous status
         }
       },
       { new: true }
@@ -358,10 +371,17 @@ export async function updateTicketStatusForThreat(threatId: any, isDone: boolean
     const newStatus = isDone ? "Resolved" : "Processing";
     console.log(`📝 Updating ticket ${ticket._id} status from ${ticket.status} to ${newStatus}`);
 
+    // Store current status as previous status before updating
+    const previousStatus = ticket.status;
+
     // Update ticket status
     const updatedTicket = await TicketModel.findByIdAndUpdate(
       ticket._id, 
-      { $set: { status: newStatus } },
+      { $set: { 
+          status: newStatus, 
+          previousStatus: previousStatus  // Set the previous status
+        } 
+      },
       { new: true }
     );
 

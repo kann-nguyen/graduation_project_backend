@@ -37,6 +37,14 @@ export class Ticket extends TimeStamps {
     default: "Not accepted",
     type: String,
   })
+  public previousStatus!: string;
+
+  @prop({
+    required: true,
+    enum: ["Not accepted", "Processing", "Submitted", "Resolved"],
+    default: "Not accepted",
+    type: String,
+  })
   public status!: string;
 
   @prop({ type: String })

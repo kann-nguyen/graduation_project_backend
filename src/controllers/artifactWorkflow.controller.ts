@@ -64,14 +64,20 @@ export class ArtifactWorkflowController {
       });
     }
   }
-
-  private static async _initializeWorkflowCycle(artifactId: string | mongoose.Types.ObjectId) {    const artifact = await ArtifactModel.findById(artifactId);
+  private static async _initializeWorkflowCycle(artifactId: string | mongoose.Types.ObjectId) {
+    console.log(`[INFO] Initializing new workflow cycle for artifact: ${artifactId}`);
+    
+    // Get the latest artifact data
+    const artifact = await ArtifactModel.findById(artifactId);
     if (!artifact) {
       throw new Error('Artifact not found');
-    }
-
-    // Create a new workflow cycle
-    const cycleNumber = (artifact.workflowCyclesCount || 0) + 1;
+    }    // First, check if we need to increment the workflow cycle count
+    const lastCyclesCount = artifact.workflowCyclesCount || 0;
+    const cycleNumber = lastCyclesCount + 1;
+    
+    console.log(`[DEBUG] Creating new workflow cycle #${cycleNumber} (previous cycles count: ${lastCyclesCount})`);
+    
+    // Initialize new cycle with all required fields
     const newCycle = {
       cycleNumber,
       currentStep: 1, // Start at step 1 (Detection)
@@ -79,11 +85,11 @@ export class ArtifactWorkflowController {
       // Initialize all steps to ensure they exist in both currentWorkflowCycle and workflowCycles array
       detection: {
         completedAt: new Date(), // Detection is completed when the cycle starts
-        numberVuls: 0,
+        numberVuls: artifact.vulnerabilityList?.length || 0, // Initialize with current vulnerability count
         listVuls: []
       },
       classification: {
-        numberThreats: 0,
+        numberThreats: artifact.threatList?.length || 0, // Initialize with current threat count
         listThreats: []
       },
       assignment: {
@@ -101,42 +107,75 @@ export class ArtifactWorkflowController {
         numberTicketsResolved: 0,
         numberTicketsReturnedToProcessing: 0
       }
-    };// Initialize or update the artifact's workflow properties
-    artifact.workflowCyclesCount = cycleNumber - 1; // Will be incremented to cycleNumber when completed
-    artifact.currentWorkflowStep = 1;
-    artifact.workflowCompleted = false;    // Set the current workflow cycle
-    artifact.currentWorkflowCycle = newCycle;
+    };
     
-    // Make sure workflowCycles array exists
-    if (!artifact.workflowCycles) {
-      artifact.workflowCycles = [];
-    }
-    
-    // Create a separate deep clone of the cycle to ensure it's properly added to array
-    // This avoids reference issues where changes to current cycle might not reflect in array
+    // Create a deep copy for pushing to the workflow cycles array
     const deepCopy = JSON.parse(JSON.stringify(newCycle));
     
-    // Add to workflow cycles as a plain object - Mongoose will handle conversion
-    artifact.workflowCycles.push(deepCopy);
+    // Check if we already have this cycle in the array to avoid duplicates
+    const existingCycle = artifact.workflowCycles?.find(
+      (c: any) => c.cycleNumber === cycleNumber
+    );
     
-    // Validate that data is consistent 
-    const lastCycleInArray = artifact.workflowCycles[artifact.workflowCycles.length - 1];
+    let updateOperation: any = { 
+      $set: {
+        workflowCyclesCount: cycleNumber,  // Set directly to the current cycle number
+        currentWorkflowStep: 1,
+        workflowCompleted: false,
+        currentWorkflowCycle: newCycle
+      }
+    };
     
-    await artifact.save();
-    return artifact;
-  }
-
-  private static async _startNewWorkflowCycle(artifactId: string | mongoose.Types.ObjectId) {
-    const artifact = await ArtifactModel.findById(artifactId);
-    if (!artifact) {
-      throw new Error('Artifact not found');
+    // Only push to array if this cycle doesn't exist yet
+    if (!existingCycle) {
+      updateOperation.$push = { workflowCycles: deepCopy };
     }
-
-    // Check if current cycle is complete
-    if (!artifact.currentWorkflowCycle?.completedAt) {
-      throw new Error('Cannot start a new cycle before completing the current one');
+    
+    console.log(`[DEBUG] Applying workflow update:`, {
+      cycleNumber,
+      existingCycle: existingCycle ? 'yes' : 'no',
+      willPush: !existingCycle
+    });
+    
+    // Use findOneAndUpdate with an atomic operation to ensure consistency
+    const updatedArtifact = await ArtifactModel.findOneAndUpdate(
+      { _id: artifact._id },
+      updateOperation,
+      { 
+        new: true,  // Return the updated document
+        runValidators: true  // Run schema validators
+      }
+    );
+      if (!updatedArtifact) {
+      throw new Error(`Failed to initialize workflow cycle for artifact ${artifact._id}`);
     }
-    return await this._initializeWorkflowCycle(artifactId);
+    
+    // Verify that the cycle was properly created/updated
+    const finalCheck = await ArtifactModel.findById(artifact._id);
+    if (finalCheck) {
+      // Check if currentWorkflowCycle matches what we expect
+      if (!finalCheck.currentWorkflowCycle || finalCheck.currentWorkflowCycle.cycleNumber !== cycleNumber) {
+        console.log(`[WARN] Workflow cycle verification failed:`, {
+          expected: cycleNumber,
+          actual: finalCheck.currentWorkflowCycle?.cycleNumber,
+          workflowCyclesCount: finalCheck.workflowCyclesCount,
+          cyclesInArray: finalCheck.workflowCycles?.length
+        });
+        
+        // Try to fix if needed
+        if (!finalCheck.currentWorkflowCycle) {
+          console.log(`[INFO] Auto-fixing: currentWorkflowCycle was not set`);
+          await ArtifactModel.findByIdAndUpdate(
+            artifact._id,
+            { $set: { currentWorkflowCycle: newCycle } }
+          );
+        }
+      } else {
+        console.log(`[INFO] Workflow cycle #${cycleNumber} successfully initialized`);
+      }
+    }
+    
+    return updatedArtifact;
   }
 
   private static async _moveToNextStep(artifactId: string | mongoose.Types.ObjectId, stepData: any = {}) {
@@ -162,16 +201,25 @@ export class ArtifactWorkflowController {
     
     // Update current step data
     this._updateStepData(artifact, currentStep, updatedStepData);    // Check if we've completed all steps
-    if (nextStep > 5) {      
-      // Mark the current cycle as completed
-      if (artifact.currentWorkflowCycle) {
-        artifact.currentWorkflowCycle.completedAt = new Date();
-      }      // Increment the workflow cycles count
-      artifact.workflowCyclesCount = (artifact.workflowCyclesCount || 0) + 1;
+    if (nextStep > 5) {
+      console.log(`[INFO] Completed all steps for cycle #${artifact.currentWorkflowCycle.cycleNumber}`);
       
-      // Reset step to 1 for potential next cycle
-      nextStep = 1;
-      artifact.workflowCompleted = true;
+      // Mark the current cycle as completed using atomic update
+      await ArtifactModel.findByIdAndUpdate(
+        artifact._id,
+        { 
+          $set: {
+            'currentWorkflowCycle.completedAt': new Date(),
+            workflowCyclesCount: artifact.currentWorkflowCycle.cycleNumber, // Ensure count is correctly set
+            workflowCompleted: true
+          }
+        },
+        { new: true }
+      );
+      
+      // Start a new workflow cycle with a fresh artifact state
+      console.log(`[INFO] Starting new workflow cycle for artifact ${artifact._id}`);
+      return await ArtifactWorkflowController._initializeWorkflowCycle(artifact._id);
     }
 
     // Update the current step
@@ -466,6 +514,7 @@ export class ArtifactWorkflowController {
 
   private static async _checkVerificationStepCompletion(artifact: any): Promise<any> {    
     // If the artifact is still scanning, it's in the verification process
+    console.log(`[INFO] Checking verification for artifact: ${artifact._id}`);
     if (artifact.isScanning) {
       return artifact;
     }
@@ -475,35 +524,99 @@ export class ArtifactWorkflowController {
       resolved: resolvedTickets,
       returned: returnedTickets    } = await ArtifactWorkflowController._getTicketCounts(artifact._id);
     
-    
-    // Update verification step data
+    console.log(`[INFO] resolvedTickets: ${resolvedTickets.length}`);
+    console.log(`[INFO] returnedTickets: ${returnedTickets.length}`);    // Update verification step data using findOneAndUpdate to avoid version conflicts
     if (artifact.currentWorkflowCycle) {
-      if (!artifact.currentWorkflowCycle.verification) {
-        artifact.currentWorkflowCycle.verification = {};
-      }
+      // Prepare verification data
+      const verificationData: any = {
+        'currentWorkflowCycle.verification.numberTicketsResolved': resolvedTickets.length,
+        'currentWorkflowCycle.verification.numberTicketsReturnedToProcessing': returnedTickets.length,
+        'currentWorkflowCycle.verification.completedAt': new Date()
+      };
       
-      artifact.currentWorkflowCycle.verification.numberTicketsResolved = resolvedTickets.length;
-      artifact.currentWorkflowCycle.verification.numberTicketsReturnedToProcessing = returnedTickets.length;
-      artifact.currentWorkflowCycle.verification.completedAt = new Date();
+      // Update using findOneAndUpdate to avoid version conflicts
+      await ArtifactModel.findByIdAndUpdate(
+        artifact._id,
+        { $set: verificationData },
+        { new: true }
+      );
       
-      // Mark as successful if all submitted tickets were resolved
-      artifact.currentWorkflowCycle.verification.success = returnedTickets.length === 0;
-      artifact.currentWorkflowCycle.verification.notes = returnedTickets.length === 0 
-        ? "All issues verified successfully" 
-        : `${returnedTickets.length} tickets returned for further remediation`;
-      
-      await artifact.save();
+      // Get fresh artifact data after update
+      artifact = await ArtifactModel.findById(artifact._id);
     }
     
-    // Complete this workflow cycle and potentially start a new one
-    
-    // Check if any issues require another cycle
+    // Complete this workflow cycle and potentially start a new one    // Check if any issues require another cycle
     if (returnedTickets.length > 0 || artifact.vulnerabilityList?.length > 0) {
-      return await ArtifactWorkflowController._startNewWorkflowCycle(artifact._id);
+      console.log(`[INFO] START NEW CYCLE`);
+      
+      // Get a fresh artifact before starting a new cycle to ensure we have the latest data
+      const freshArtifact = await ArtifactModel.findById(artifact._id);
+      if (!freshArtifact) {
+        throw new Error(`Failed to retrieve artifact ${artifact._id} before starting new cycle`);
+      }
+      
+      console.log(`[DEBUG] Current workflow data before new cycle:`, {
+        cyclesCount: freshArtifact.workflowCyclesCount,
+        currentStep: freshArtifact.currentWorkflowStep,
+        cyclesLength: freshArtifact.workflowCycles?.length
+      });
+      
+      // CRITICAL: First ensure the current cycle is saved to the workflowCycles array
+      if (freshArtifact.currentWorkflowCycle) {
+        const currentCycle = freshArtifact.currentWorkflowCycle;
+        const cycleNumber = currentCycle.cycleNumber;
+        
+        console.log(`[INFO] Ensuring current cycle #${cycleNumber} is saved to workflowCycles array`);
+        
+        // Mark the current cycle as completed
+        currentCycle.completedAt = new Date();
+        
+        // Find if this cycle already exists in the array
+        const existingCycleIndex = freshArtifact.workflowCycles?.findIndex(
+          (c: any) => c.cycleNumber === cycleNumber
+        ) ?? -1;
+        
+        // Create a clean deep copy
+        const cycleCopy = JSON.parse(JSON.stringify(currentCycle));
+        
+        // Update operation - either update the existing cycle or push a new one
+        let updateOp: any;
+        
+        if (existingCycleIndex >= 0) {
+          // Update existing cycle
+          updateOp = { 
+            $set: { [`workflowCycles.${existingCycleIndex}`]: cycleCopy }
+          };
+          console.log(`[DEBUG] Updating existing cycle at index ${existingCycleIndex}`);
+        } else {
+          // Add new cycle
+          updateOp = { 
+            $push: { workflowCycles: cycleCopy }
+          };
+          console.log(`[DEBUG] Adding new cycle to workflowCycles array`);
+        }
+        
+        // Apply the update
+        await ArtifactModel.findByIdAndUpdate(
+          freshArtifact._id,
+          updateOp,
+          { new: false }  // Don't need the updated document right now
+        );
+      }
+      
+      // Now initialize a new workflow cycle - this will handle the updates atomically
+      return await ArtifactWorkflowController._initializeWorkflowCycle(freshArtifact._id);
     } else {
-      artifact.workflowCompleted = true;
-      await artifact.save();
-      return artifact;
+      console.log(`[INFO] WORKFLOW COMPLETED - No tickets returned or vulnerabilities remaining`);
+      
+      // Update workflow completed status - use only one atomic operation
+      const completedArtifact = await ArtifactModel.findByIdAndUpdate(
+        artifact._id,
+        { $set: { workflowCompleted: true } },
+        { new: true }
+      );
+      
+      return completedArtifact;
     }
   }
 
@@ -554,13 +667,10 @@ export class ArtifactWorkflowController {
     
     const resolved = tickets.filter((ticket: any) => ticket.status === "Resolved");
     
-    // For returned tickets, we need to check history notes or assume based on workflow context
-    // Here we'll use a simple heuristic that if a ticket was in Processing after being in Submitted,
-    // it was likely returned
+    // Identify returned tickets using previousStatus field
+    // A ticket is considered returned if it was in "Submitted" status but now back in "Processing"
     const returned = tickets.filter((ticket: any) => 
-      ticket.status === "Processing" && ticket.historyNotes?.some((note: string) => 
-        note.includes("returned") || note.includes("reverted")
-      )
+      ticket.status === "Processing" && ticket.previousStatus === "Submitted"
     );
     
     return {
@@ -574,46 +684,56 @@ export class ArtifactWorkflowController {
     };
   }
 
-
   private static _syncWorkflowCycles(artifact: any): void {
+    console.log(`[DEBUG] Syncing workflow cycles for artifact: ${artifact._id}`);
     
     if (!artifact.currentWorkflowCycle) {
+      console.log(`[WARN] No currentWorkflowCycle to sync`);
       return;
     }
     
     if (!artifact.workflowCycles) {
+      console.log(`[DEBUG] workflowCycles array not found, initializing empty array`);
       artifact.workflowCycles = [];
     }
     
     const currentCycleNumber = artifact.currentWorkflowCycle.cycleNumber;
+    console.log(`[DEBUG] Syncing cycle #${currentCycleNumber}`);
     
     // Find the matching cycle in the workflowCycles array
     const cycleIndex = artifact.workflowCycles.findIndex(
       (cycle: any) => cycle.cycleNumber === currentCycleNumber
     );
     
-    if (cycleIndex === -1) {
-      // Create deep copy to ensure it's a separate object
-      const cycleCopy = JSON.parse(JSON.stringify(artifact.currentWorkflowCycle));
-      
-      // Add it if not found
-      artifact.workflowCycles.push(cycleCopy);
-      return;
-    }
-    
     // Create deep copy to ensure it's a separate object
     const cycleCopy = JSON.parse(JSON.stringify(artifact.currentWorkflowCycle));
     
-    // Replace the existing cycle with the current one to ensure they're in sync
-    artifact.workflowCycles[cycleIndex] = cycleCopy;
+    if (cycleIndex === -1) {
+      // Add it if not found
+      console.log(`[DEBUG] Cycle #${currentCycleNumber} not found in workflowCycles array, adding it`);
+      artifact.workflowCycles.push(cycleCopy);
+    } else {
+      // Replace the existing cycle with the current one to ensure they're in sync
+      console.log(`[DEBUG] Updating existing cycle #${currentCycleNumber} at index ${cycleIndex}`);
+      artifact.workflowCycles[cycleIndex] = cycleCopy;
+    }
+    
+    // Ensure workflowCyclesCount is consistent with the current cycle
+    if ((artifact.workflowCyclesCount || 0) < currentCycleNumber) {
+      console.log(`[DEBUG] Updating workflowCyclesCount from ${artifact.workflowCyclesCount} to ${currentCycleNumber}`);
+      artifact.workflowCyclesCount = currentCycleNumber;
+    }
   }
-
   private static _validateWorkflowConsistency(artifact: any): void {
+    console.log(`[DEBUG] Validating workflow consistency for artifact: ${artifact._id}`);
+    
     if (!artifact.currentWorkflowCycle) {
+      console.log(`[WARN] No currentWorkflowCycle to validate`);
       return;
     }
     
     if (!artifact.workflowCycles || artifact.workflowCycles.length === 0) {
+      console.log(`[WARN] workflowCycles array is empty or undefined`);
       return;
     }
     
@@ -621,7 +741,32 @@ export class ArtifactWorkflowController {
     const matchingCycle = artifact.workflowCycles.find((c: any) => c.cycleNumber === currentCycleNumber);
     
     if (!matchingCycle) {
-      return;
+      console.log(`[ERROR] Current cycle #${currentCycleNumber} not found in workflowCycles array!`);
+      console.log(`[DEBUG] Available cycles:`, artifact.workflowCycles.map((c: any) => c.cycleNumber));
+      
+      // Auto-fix: add the current cycle to the array
+      console.log(`[INFO] Auto-fixing: Adding current cycle to workflowCycles array`);
+      const cycleCopy = JSON.parse(JSON.stringify(artifact.currentWorkflowCycle));
+      artifact.workflowCycles.push(cycleCopy);
+    } else {
+      // Verify that the steps match
+      if (matchingCycle.currentStep !== artifact.currentWorkflowCycle.currentStep) {
+        console.log(`[WARN] Step mismatch: currentWorkflowCycle.currentStep=${artifact.currentWorkflowCycle.currentStep}, workflowCycles[].currentStep=${matchingCycle.currentStep}`);
+        
+        // Auto-fix: update the cycle in the array
+        const index = artifact.workflowCycles.findIndex((c: any) => c.cycleNumber === currentCycleNumber);
+        if (index !== -1) {
+          console.log(`[INFO] Auto-fixing: Updating cycle in workflowCycles array`);
+          artifact.workflowCycles[index] = JSON.parse(JSON.stringify(artifact.currentWorkflowCycle));
+        }
+      }
+    }
+    
+    // Ensure workflowCyclesCount is consistent
+    if (artifact.workflowCyclesCount !== currentCycleNumber) {
+      console.log(`[WARN] workflowCyclesCount (${artifact.workflowCyclesCount}) does not match currentWorkflowCycle.cycleNumber (${currentCycleNumber})`);
+      console.log(`[INFO] Auto-fixing: Setting workflowCyclesCount to ${currentCycleNumber}`);
+      artifact.workflowCyclesCount = currentCycleNumber;
     }
   }
 }

@@ -365,23 +365,59 @@ export async function processScannerResult(artifactId: string, vulns: any): Prom
     console.log(`[DEBUG] Processing scanner result for artifact ${artifactId}`);
     console.log(`[DEBUG] Current artifact.totalScanners: ${artifact.totalScanners}`);
     console.log(`[DEBUG] Current artifact.scannersCompleted: ${artifact.scannersCompleted}`);
-    console.log(`[DEBUG] Current artifact.isScanning: ${artifact.isScanning}`);
-
-    // Initialize or update tempVuls
-    artifact.tempVuls = mergeVulnerabilities(artifact.tempVuls || [], vulns);
+    console.log(`[DEBUG] Current artifact.isScanning: ${artifact.isScanning}`);    // Merge the new vulnerabilities with existing tempVuls
+    const updatedTempVuls = mergeVulnerabilities(artifact.tempVuls || [], vulns);
 
     // Increment completed scanners count
-    artifact.scannersCompleted = (artifact.scannersCompleted || 0) + 1;
+    const completedScanners = (artifact.scannersCompleted || 0) + 1;
 
-    console.log(`Scanner result processed for artifact ${artifactId}. Total completed scanners: ${artifact.scannersCompleted} of ${artifact.totalScanners}`);    // Check if all scanners have completed
-    if (artifact.scannersCompleted >= (artifact.totalScanners ?? 1)) {
-      artifact.scannersCompleted = 0;
-      artifact.totalScanners = 0;
-      artifact.isScanning = false;
-      await updateArtifactAfterScan(artifact);
+    console.log(`Scanner result processed for artifact ${artifactId}. Total completed scanners: ${completedScanners} of ${artifact.totalScanners}`);    // Check if all scanners have completed
+    if (completedScanners >= (artifact.totalScanners ?? 1)) {
+      // First just update the tempVuls and scanner state
+      console.log(`[DEBUG] All scanners completed. Processing ${updatedTempVuls.length} vulnerabilities`);
+      
+      // Use findOneAndUpdate to avoid version conflicts
+      const updatedArtifact = await ArtifactModel.findByIdAndUpdate(
+        artifactId,
+        {
+          $set: {
+            tempVuls: updatedTempVuls,
+            scannersCompleted: 0,
+            totalScanners: 0,
+            isScanning: false
+          }
+        },
+        { new: true }
+      );
+
+      // Get a fresh copy of the artifact and ensure tempVuls is populated
+      const freshArtifact = await ArtifactModel.findById(artifactId);
+      if (freshArtifact) {
+        // Make sure tempVuls is available
+        if (!freshArtifact.tempVuls || freshArtifact.tempVuls.length === 0) {
+          console.log(`[WARN] tempVuls missing after update, manually setting to ${updatedTempVuls.length} items`);
+          freshArtifact.tempVuls = updatedTempVuls;
+          await freshArtifact.save();
+        }
+        
+        console.log(`[DEBUG] About to process ${freshArtifact.tempVuls?.length || 0} vulnerabilities in updateArtifactAfterScan`);
+        await updateArtifactAfterScan(freshArtifact);
+      } else {
+        console.error(`[ERROR] Could not retrieve fresh artifact after scanner completion`);
+      }
+    } else {
+      // Just update the scanners completed count and tempVuls
+      console.log(`[DEBUG] Scanner ${completedScanners}/${artifact.totalScanners} completed with ${updatedTempVuls.length} vulnerabilities`);
+      await ArtifactModel.findByIdAndUpdate(
+        artifactId,
+        {
+          $set: {
+            tempVuls: updatedTempVuls,
+            scannersCompleted: completedScanners
+          }
+        }
+      );
     }
-
-    await artifact.save();
 
   } catch (error) {
     console.error("Error processing scanner result:", error);
@@ -405,41 +441,73 @@ function threatMatchesVul(threat: any, vuln: any): boolean {
  * - Nếu không có thì cập nhật ticket thành "Resolved" và xóa threat khỏi DB cũng như khỏi artifact.
  */
 async function processExistingThreats(artifact: any): Promise<void> {
+  // Skip if no tempVuls or if there are no existing threats
+  if (!artifact.tempVuls || artifact.tempVuls.length === 0 || !artifact.threatList || artifact.threatList.length === 0) {
+    console.log(`[DEBUG] No tempVuls or no existing threats to process`);
+    return;
+  }
+
   // Đảm bảo threatList đã được populate
   await artifact.populate("threatList");
+  
+  console.log(`[DEBUG] Processing ${artifact.threatList?.length || 0} existing threats`);
 
   // Lưu danh sách threatId cần loại bỏ sau này
   const threatsToRemove: any[] = [];
+  
+  // Make sure threatList is an array
+  if (!Array.isArray(artifact.threatList)) {
+    console.log(`[WARN] artifact.threatList is not an array`);
+    return;
+  }
 
   for (const threat of artifact.threatList) {
+    if (!threat || !threat._id) {
+      console.log(`[WARN] Invalid threat found in threatList, skipping`);
+      continue;
+    }
+    
     // Kiểm tra có tồn tại vulnerability tương ứng trong tempVuls
     const existsInTemp = artifact.tempVuls?.some((vuln: any) => threatMatchesVul(threat, vuln));
 
     if (existsInTemp) {
       // Cập nhật trạng thái ticket của threat thành "Processing"
+      console.log(`[DEBUG] Updating ticket for threat ${threat._id} to Processing`);
       await updateTicketStatusForThreat(threat._id, false);
     } else {
       // Cập nhật trạng thái ticket của threat thành "Resolved"
+      console.log(`[DEBUG] Updating ticket for threat ${threat._id} to Resolved`);
       await updateTicketStatusForThreat(threat._id, true);
 
       // Đánh dấu threat này để xóa
       threatsToRemove.push(threat._id);
-      console.log(`Threat ${threat._id} bị xóa vì không tìm thấy vulnerability tương ứng.`);
+      console.log(`[INFO] Threat ${threat._id} bị xóa vì không tìm thấy vulnerability tương ứng.`);
     }
   }
 
+  // Only update the artifact if there are threats to remove
+  if (threatsToRemove.length > 0) {
+    // Loại bỏ các threat đã bị xóa khỏi artifact.threatList (không xóa khỏi database)
+    const updatedThreatList = artifact.threatList.filter(
+      (t: any) => !threatsToRemove.some((removeId: any) => removeId.toString() === t._id.toString())
+    );
+    
+    // Update the artifact with the new threatList
+    await ArtifactModel.findByIdAndUpdate(
+      artifact._id, 
+      { $set: { threatList: updatedThreatList } },
+      { new: true }
+    );
+    
+    console.log(`[INFO] Removed ${threatsToRemove.length} threats from artifact.threatList`);
+  }
+  
   try {
     await ArtifactWorkflowController.updateWorkflowStatus(artifact._id, 5);
   } catch (workflowError) {
     console.error(`[ERROR] Failed to update workflow status:`, workflowError);
     // Don't throw error here, as we don't want to block ticket update
   }
-
-  // Loại bỏ các threat đã bị xóa khỏi artifact.threatList (không xóa khỏi database)
-  artifact.threatList = artifact.threatList.filter(
-    (t: any) => !threatsToRemove.some((removeId: any) => removeId.toString() === t._id.toString())
-  );
-
 }
 
 /**
@@ -449,26 +517,65 @@ async function processExistingThreats(artifact: any): Promise<void> {
  */
 async function processNewVulnerabilities(artifact: any): Promise<void> {
   let threatCount = 0;
+  const newThreatIds: any[] = [];
+  
+  console.log(`[DEBUG] Processing new vulnerabilities: ${artifact.tempVuls?.length || 0} total vulnerabilities found`);
+  
+  if (!artifact.tempVuls || artifact.tempVuls.length === 0) {
+    console.log(`[WARN] No vulnerabilities to process in artifact ${artifact._id}`);
+    return;
+  }
+  
+  // Make sure artifact.threatList exists
+  if (!artifact.threatList) {
+    artifact.threatList = [];
+  }
 
-  for (const newVul of artifact.tempVuls || []) {
+  for (const newVul of artifact.tempVuls) {
+    // Make sure we have a valid vulnerability 
+    if (!newVul || !newVul.cveId) {
+      console.log(`[WARN] Invalid vulnerability found, skipping`);
+      continue;
+    }
+    
+    console.log(`[DEBUG] Processing vulnerability: ${newVul.cveId}`);
+    
     // Kiểm tra nếu vulnerability này chưa tồn tại trong artifact.vulnerabilityList
     const exists = artifact.vulnerabilityList?.some(
       (oldVul: any) => oldVul.cveId === newVul.cveId
     );
+    
     if (!exists) {
-      // Create threat with vulnerability data
-      const threatData = createThreatFromVuln(newVul, artifact.type);
-      const createdThreat = await ThreatModel.create(threatData);
+      try {
+        // Create threat with vulnerability data
+        const threatData = createThreatFromVuln(newVul, artifact.type);
+        const createdThreat = await ThreatModel.create(threatData);
 
-      // Add to artifact threat list
-      artifact.threatList.push(createdThreat._id);
+        // Add to artifact threat list
+        artifact.threatList.push(createdThreat._id);
+        newThreatIds.push(createdThreat._id);
 
-      // Create ticket for the threat
-      await autoCreateTicketFromThreat(artifact._id, createdThreat._id);
+        // Create ticket for the threat
+        await autoCreateTicketFromThreat(artifact._id, createdThreat._id);
 
-      threatCount++;
+        threatCount++;
+        console.log(`[DEBUG] Created threat and ticket for CVE: ${newVul.cveId}`);
+      } catch (err) {
+        console.error(`[ERROR] Failed to process vulnerability ${newVul.cveId}:`, err);
+      }
     }
   }
+  
+  // Save the updated threatList
+  await ArtifactModel.findByIdAndUpdate(
+    artifact._id,
+    { 
+      $set: { threatList: artifact.threatList }
+    },
+    { new: true }
+  );
+  
+  console.log(`[INFO] Created ${threatCount} new threats from ${artifact.tempVuls.length} vulnerabilities`);
 }
 
 /**
@@ -479,35 +586,79 @@ async function processNewVulnerabilities(artifact: any): Promise<void> {
  */
 export async function updateArtifactAfterScan(artifact: any): Promise<void> {
   try {
-    // 1. Xử lý threat hiện có trong artifact
-    await processExistingThreats(artifact);
-
-    // 2. Xử lý tempVuls: tạo threat mới cho vulnerability không có trong danh sách cũ
-    await processNewVulnerabilities(artifact);
-
-    // 3. Lưu lịch sử quét vào scanHistory
-    if (artifact.tempVuls && artifact.tempVuls.length > 0) {
-      if (!artifact.scanHistory) {
-        artifact.scanHistory = [];
+    console.log(`[INFO] Starting updateArtifactAfterScan for artifact ${artifact._id}`);
+    console.log(`[DEBUG] Initial state: ${artifact.tempVuls?.length || 0} vulnerabilities, ${artifact.threatList?.length || 0} threats`);
+    
+    // Ensure we have the complete artifact with all necessary fields
+    const completeArtifact = await ArtifactModel.findById(artifact._id);
+    if (!completeArtifact) {
+      console.error(`[ERROR] Could not find artifact ${artifact._id}`);
+      return;
+    }
+    
+    // Make sure we have the tempVuls from the original artifact if not present in completeArtifact
+    if (!completeArtifact.tempVuls || completeArtifact.tempVuls.length === 0) {
+      if (artifact.tempVuls && artifact.tempVuls.length > 0) {
+        console.log(`[DEBUG] Restoring tempVuls from original artifact object`);
+        completeArtifact.tempVuls = artifact.tempVuls;
       }
-
-      // Add current scan to history
-      artifact.scanHistory.push({
-        timestamp: new Date(),
-        vulnerabilities: artifact.tempVuls || []
-      });
-
-      console.log(`Added scan history entry with ${artifact.tempVuls.length} vulnerabilities`);
-    }    // 4. Gán lại vulnerabilityList bằng tempVuls và lưu artifact
-    artifact.vulnerabilityList = artifact.tempVuls || [];
-    artifact.tempVuls = [];
+    }
+    
+    // 2. First process new vulnerabilities to create threats and tickets
+    await processNewVulnerabilities(completeArtifact);
+    
+    // 1. Then process existing threats to update their status
+    await processExistingThreats(completeArtifact);
+    
+    // 3. Lưu lịch sử quét vào scanHistory và cập nhật artifact
+    // First, make sure we add threats before updating the vulnerabilityList
+    console.log(`[DEBUG] Processing ${artifact.tempVuls?.length || 0} vulnerabilities after scan`);
+    
+    // Create a copy of tempVuls to ensure we don't lose them in the update process
+    const tempVulsCopy = [...(artifact.tempVuls || [])];
+    
+    // Add scan history entry if there are vulnerabilities
+    if (tempVulsCopy.length > 0) {
+      await ArtifactModel.findByIdAndUpdate(
+        artifact._id,
+        {
+          $push: {
+            scanHistory: {
+              timestamp: new Date(),
+              vulnerabilities: tempVulsCopy
+            }
+          }
+        },
+        { new: true }
+      );
+      
+      console.log(`Added scan history entry with ${tempVulsCopy.length} vulnerabilities`);
+    }
+    
+    // Now update the vulnerabilityList but DON'T clear tempVuls yet
+    await ArtifactModel.findByIdAndUpdate(
+      artifact._id,
+      {
+        $set: {
+          vulnerabilityList: tempVulsCopy
+        }
+      },
+      { new: true }
+    );
+    
+    // Only clear tempVuls after all processing is done
     await artifact.save();
+    
+    // Log the updated state
+    console.log(`[DEBUG] Updated artifact vulnerabilities: ${tempVulsCopy.length}`);
+    console.log(`[DEBUG] Current threatList length: ${artifact.threatList?.length || 0}`);
     console.log(`Artifact ${artifact._id} đã được cập nhật với vulnerabilityList mới từ tempVuls.`);
 
     // 5. Update workflow status based on scan results
     try {
       await ArtifactWorkflowController.updateWorkflowStatus(artifact._id, 1);
       await ArtifactWorkflowController.updateWorkflowStatus(artifact._id, 2);
+      await ArtifactWorkflowController.updateWorkflowStatus(artifact._id, 3);
     } catch (workflowError) {
       console.error(`[ERROR] Failed to update workflow status:`, workflowError);
     }
