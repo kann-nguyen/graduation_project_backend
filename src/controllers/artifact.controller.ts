@@ -15,32 +15,44 @@ import { ArtifactWorkflowController } from "./artifactWorkflow.controller";
 // Lấy tất cả artifacts thuộc về một project cụ thể
 export async function getAll(req: Request, res: Response) {
   const { projectName } = req.query;
-  try {    // Tìm project theo tên và populate danh sách phase cùng artifacts của nó
+  try {
+    // Tìm project theo tên và populate danh sách phase cùng artifacts của nó
     const project = await ProjectModel.findOne({
       name: projectName,
     }).populate({
       path: "phaseList",
       populate: {
-        path: "artifacts"// Explicitly include isScanning and state fields
-      },
+        path: "artifacts",
+        // Include workflow fields
+        select: '_id name type url version threatList vulnerabilityList cpe isScanning state currentWorkflowStep workflowCycles currentWorkflowCycle workflowCyclesCount'
+      }
     });
-
+    
     // Nếu không tìm thấy project, trả về lỗi
     if (!project) {
       return res.json(errorResponse("Project not found"));
     }
-
+    
     // Kiểm tra nếu phaseList là một mảng tài liệu hợp lệ
-    if (isDocumentArray(project.phaseList)) {      // Lấy tất cả artifacts từ các phase
+    if (isDocumentArray(project.phaseList)) {
+      // Lấy tất cả artifacts từ các phase
       const artifacts = project.phaseList
-        .map((phase) => phase.artifacts)
+        .map((phase: any) => phase.artifacts)
         .flat();
-
+      
       // Trả về danh sách artifacts kèm theo thông báo thành công
       return res.json(
         successResponse(
           artifacts,
           "Get all artifacts with respective vulnerabilities"
+        )
+      );
+    } else {
+      // If phaseList is not a valid document array
+      return res.json(
+        successResponse(
+          [],
+          "No valid artifacts found for this project"
         )
       );
     }
