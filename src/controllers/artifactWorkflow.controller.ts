@@ -4,17 +4,42 @@ import { Artifact } from '../models/artifact';
 import mongoose from 'mongoose';
 import { Ticket } from '../models/ticket';
 
-export class ArtifactWorkflowController {    
-  public static async getWorkflowHistory(req: Request, res: Response) {
+export class ArtifactWorkflowController {      public static async getWorkflowHistory(req: Request, res: Response) {
     try {
       const { artifactId } = req.params;
+      console.log(`[INFO] Fetching workflow history for artifact: ${artifactId}`);
       
+      // Get the workflow history
       const history = await ArtifactWorkflowController._getWorkflowHistory(artifactId);
+      console.log(`[DEBUG] Found ${history.length} workflow cycles`);
+      
+      // Check if we found any history
+      if (history.length === 0) {
+        // If no history exists yet, check if we need to initialize a cycle
+        console.log(`[INFO] No workflow history found - checking if artifact exists`);
+        const artifact = await ArtifactModel.findById(artifactId);
+        if (artifact) {
+          if (!artifact.currentWorkflowCycle) {
+            console.log(`[INFO] No current workflow cycle - initializing`);
+            // Initialize workflow if needed - this will create the first cycle
+            await ArtifactWorkflowController._initializeWorkflowCycle(artifactId);
+            // Get the updated history
+            const updatedHistory = await ArtifactWorkflowController._getWorkflowHistory(artifactId);
+            console.log(`[DEBUG] Initialized workflow - now have ${updatedHistory.length} cycles`);
+            return res.status(200).json({
+              success: true,
+              data: updatedHistory
+            });
+          }
+        }
+      }
+      
       return res.status(200).json({
         success: true,
         data: history
       });
     } catch (error: any) {
+      console.error(`[ERROR] Failed to fetch workflow history:`, error);
       return res.status(500).json({
         success: false,
         message: error.message || 'Failed to fetch workflow history'
@@ -232,11 +257,31 @@ export class ArtifactWorkflowController {
     
     return artifact;
   }
-
   private static async _getWorkflowHistory(artifactId: string | mongoose.Types.ObjectId) {
+    console.log(`[DEBUG] Getting workflow history for artifact ${artifactId}`);
     const artifact = await ArtifactModel.findById(artifactId);
     if (!artifact) {
       throw new Error('Artifact not found');
+    }
+
+    // If this artifact has no workflow cycles yet, initialize one
+    if (!artifact.workflowCycles || artifact.workflowCycles.length === 0) {
+      console.log(`[INFO] No workflow cycles found for artifact ${artifactId}, initializing`);
+      try {
+        await this._initializeWorkflowCycle(artifactId);
+        
+        // Fetch the updated artifact with the new workflow cycle
+        const updatedArtifact = await ArtifactModel.findById(artifactId);
+        if (!updatedArtifact) {
+          throw new Error('Failed to initialize workflow cycle');
+        }
+        
+        return updatedArtifact.workflowCycles || [];
+      } catch (error) {
+        console.error(`[ERROR] Failed to initialize workflow cycle:`, error);
+        // Return empty array in case of initialization error
+        return [];
+      }
     }
 
     return artifact.workflowCycles || [];
