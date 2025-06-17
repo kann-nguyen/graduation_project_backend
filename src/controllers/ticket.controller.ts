@@ -2,6 +2,7 @@ import { Request, Response } from "express";
 import { AccountModel, ArtifactModel, ChangeHistoryModel, PhaseModel, ProjectModel, ThreatModel, TicketModel, UserModel } from "../models/models";
 import { errorResponse, successResponse } from "../utils/responseFormat";
 import { scanArtifact } from "./phase.controller";
+import { ArtifactWorkflowController } from "./artifactWorkflow.controller";
 
 /**
  * Lấy tất cả ticket của một dự án
@@ -109,11 +110,16 @@ export async function create(req: Request, res: Response) {
       }
     }
 
+    // Set initial status and make sure previousStatus is the same as initial status
+    const initialStatus = data.status || "Not accepted";
+    
     const ticket = await TicketModel.create({
       ...data,
       targetedThreat: data.targetedThreat,
       assignee: assigneeId,
       assigner: user._id,
+      status: initialStatus,
+      previousStatus: initialStatus // Set previousStatus to same as initial status
     });
 
     if (submit && data.assignee && data.assignee.trim().length > 0) {
@@ -165,6 +171,9 @@ export async function autoCreateTicketFromThreat(artifactId: any, threatId: any)
     const suggested = await suggestAssigneeFromThreatType(artifact.projectId.toString(), threat.type);
     const project = await ProjectModel.findById(artifact.projectId);
 
+    // Set initial status for auto-created tickets
+    const initialStatus = "Not accepted";
+
     const ticket = await TicketModel.create({
       title: `Ticket for Threat ${threat.name}`,
       description: `Automatically generated ticket for ${threat.name} threats.`,
@@ -173,7 +182,8 @@ export async function autoCreateTicketFromThreat(artifactId: any, threatId: any)
       artifactId: artifactId,
       projectName: project?.name || "Unknown Project",
       targetedThreat: threatId,
-      status: "Not accepted",
+      status: initialStatus,
+      previousStatus: initialStatus, // Set previousStatus same as initial status
       priority: priority,
     });
 
@@ -223,6 +233,8 @@ export async function updateState(req: Request, res: Response) {
       return res.json(errorResponse("Account not found"));
     }
 
+    
+
     if (currentTicket.status === "Not accepted" && data.status === "Processing") {
       // Allow both project_manager and security_expert to change ticket to Processing state
       if (account.role !== "security_expert") {
@@ -236,12 +248,16 @@ export async function updateState(req: Request, res: Response) {
       return res.json(errorResponse("Invalid status transition"));
     }
 
+    // Save the current status as previousStatus before updating
+    const previousStatus = currentTicket.status;
+
     // Update the ticket if permissions check passed
     const ticket = await TicketModel.findOneAndUpdate(
       { _id: ticketId },
       {
         $set: {
-          status: data.status
+          status: data.status,
+          previousStatus: previousStatus // Store the previous status
         }
       },
       { new: true }
@@ -250,6 +266,13 @@ export async function updateState(req: Request, res: Response) {
     if (!ticket) {
       return res.json(errorResponse("Ticket not found after update"));
     }
+
+    const artifact = await ArtifactModel.findById(ticket.artifactId);
+
+    if (!artifact) {
+      console.log(`[DEBUG] Artifact ${ticket.artifactId} not found`);
+      return;
+    } 
 
     // Handle post-update actions
     switch (ticket.status) {
@@ -276,6 +299,13 @@ export async function updateState(req: Request, res: Response) {
             }
           }
         );
+            // Update workflow status since a ticket has been submitted
+        try {
+          await ArtifactWorkflowController.updateWorkflowStatus(artifact._id, 3);
+        } catch (workflowError) {
+          console.error(`[ERROR] Failed to update workflow status:`, workflowError);
+          // Don't throw error here, as we don't want to block ticket update
+        }
         
         // Create history entry with proper names
         const assigneeName = assignee?.name || 'Unknown';
@@ -294,6 +324,14 @@ export async function updateState(req: Request, res: Response) {
         const submitterName = (ticket.assignee && typeof ticket.assignee !== 'string' && 'name' in ticket.assignee ? ticket.assignee.name : user.name);
         
         handleTicketSubmitted(ticket._id.toString());
+
+            // Update workflow status since a ticket has been submitted
+        try {
+          await ArtifactWorkflowController.updateWorkflowStatus(artifact._id, 4);
+        } catch (workflowError) {
+          console.error(`[ERROR] Failed to update workflow status:`, workflowError);
+          // Don't throw error here, as we don't want to block ticket update
+        }
         
         await ChangeHistoryModel.create({
           objectId: ticket._id, 
@@ -333,10 +371,17 @@ export async function updateTicketStatusForThreat(threatId: any, isDone: boolean
     const newStatus = isDone ? "Resolved" : "Processing";
     console.log(`📝 Updating ticket ${ticket._id} status from ${ticket.status} to ${newStatus}`);
 
+    // Store current status as previous status before updating
+    const previousStatus = ticket.status;
+
     // Update ticket status
     const updatedTicket = await TicketModel.findByIdAndUpdate(
       ticket._id, 
-      { $set: { status: newStatus } },
+      { $set: { 
+          status: newStatus, 
+          previousStatus: previousStatus  // Set the previous status
+        } 
+      },
       { new: true }
     );
 
@@ -349,8 +394,7 @@ export async function updateTicketStatusForThreat(threatId: any, isDone: boolean
     const threatName = (ticket.targetedThreat && typeof ticket.targetedThreat !== 'string' && 'name' in ticket.targetedThreat)
       ? ticket.targetedThreat.name
       : "unknown threat";
-    
-    // Record the change history with better descriptions
+      // Record the change history with better descriptions
     let description = "";
     if (isDone) {
       description = `Verified success and resolved ticket`;
@@ -470,14 +514,7 @@ export async function suggestAssigneeFromThreatType(projectId: string, threatTyp
     if (!artifact) {
       console.log(`[DEBUG] Artifact ${ticket.artifactId} not found`);
       return;
-    }
-
-    console.log(`[DEBUG] Processing ticket submission for artifact ${artifact._id}`);
-    console.log(`[DEBUG] Current numberThreatSubmitted: ${artifact.numberThreatSubmitted || 0}`);
-    console.log(`[DEBUG] Total threats: ${artifact.threatList?.length || 0}`);
-    console.log(`[DEBUG] Current totalScanners: ${artifact.totalScanners ?? 0}`);
-
-    // Cộng số lượng threat đã được submit
+    } 
     artifact.numberThreatSubmitted = (artifact.numberThreatSubmitted || 0) + 1;
     await artifact.save();
 
@@ -486,11 +523,7 @@ export async function suggestAssigneeFromThreatType(projectId: string, threatTyp
     const submittedRatio = totalThreat > 0 ? (artifact.numberThreatSubmitted || 0) / totalThreat * 100 : 0;
 
     const managerConfigThreshold = artifact.rateReScan || 50;
-    
-    console.log(`[DEBUG] Updated numberThreatSubmitted: ${artifact.numberThreatSubmitted}`);
-    console.log(`[DEBUG] Submitted ratio: ${submittedRatio.toFixed(2)}%`);
-    console.log(`[DEBUG] Manager threshold: ${managerConfigThreshold}%`);
-    console.log(`[DEBUG] Should trigger rescan: ${submittedRatio >= managerConfigThreshold && (artifact.totalScanners ?? 0) <= 0}`);
+  
 
     if (submittedRatio >= managerConfigThreshold && (artifact.totalScanners ?? 0) <= 0) {
       console.log(`[INFO] Triggering rescan for artifact ${artifact._id}`);
