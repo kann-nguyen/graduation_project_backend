@@ -7,7 +7,7 @@ import {
   UserModel,
 } from "../models/models";
 import { Project } from "../models/project";
-import MyOctokit from "../octokit";
+import getOctokit, { createOctokitClient } from "../octokit";
 import redis from "../redis";
 import { errorResponse, successResponse } from "../utils/responseFormat";
 import { GitlabType, OctokitType } from "..";
@@ -70,21 +70,21 @@ async function fetchLatestFromGitlab(
   redis.set(`gitlab-${projectName}`, Date.now().toString(), "EX", 60);
 
   // Lấy danh sách commits từ GitLab
-  const processedCommitData = await getCommitsGitlab(api, projectName, projectId);
+  //const processedCommitData = await getCommitsGitlab(api, projectName, projectId);
   
   // Lấy danh sách Merge Requests từ GitLab
-  const processedPrData = await getPullRequestsGitlab(api, projectName, projectId);
+  //const processedPrData = await getPullRequestsGitlab(api, projectName, projectId);
 
   // Nếu không có dữ liệu, trả về lỗi
-  if (!processedPrData || !processedCommitData) {
-    return new Error("Error fetching data from Gitlab");
-  }
+  // if (!processedPrData || !processedCommitData) {
+  //   return new Error("Error fetching data from Gitlab");
+  // }
 
   try {
     // Lưu dữ liệu vào database
     await insertDataToDatabase(
-      processedPrData,
-      processedCommitData,
+      [],
+      [],
       projectId,
       "Gitlab"
     );

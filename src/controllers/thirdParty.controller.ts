@@ -1,7 +1,5 @@
 import { Request, Response } from "express";
 import { ThirdPartyModel } from "../models/models";
-import MyOctokit from "../octokit";
-import { Gitlab } from "@gitbeaker/rest";
 import { errorResponse, successResponse } from "../utils/responseFormat";
 import { safeGithubClient, safeGitlabClient } from "../utils/token";
 
@@ -99,7 +97,12 @@ export async function getReposFromGithub(req: Request, res: Response) {
     });
 
     // Định dạng dữ liệu trước khi trả về client
-    const formattedRepos = repos.data.map(({ html_url, visibility, owner, full_name }) => ({
+    const formattedRepos = repos.data.map(({ html_url, visibility, owner, full_name }: {
+      html_url: string;
+      visibility: string;
+      owner: { login: string };
+      full_name: string;
+    }) => ({
       name: full_name,
       url: html_url,
       status: visibility,
@@ -122,35 +125,35 @@ export async function getReposFromGitlab(req: Request, res: Response) {
   }
   try {
     // Tìm thông tin tài khoản GitLab được liên kết với user
-    const thirdParty = account.thirdParty.find((x) => x.name === "Gitlab");
-    if (!thirdParty) {
-      return res.json(errorResponse("No Gitlab account linked"));
-    }
+    // const thirdParty = account.thirdParty.find((x) => x.name === "Gitlab");
+    // if (!thirdParty) {
+    //   return res.json(errorResponse("No Gitlab account linked"));
+    // }
 
-    const { username, accessToken } = thirdParty;
-    if (!accessToken) {
-      return res.json(errorResponse("No Gitlab access token"));
-    }
+    // const { username, accessToken } = thirdParty;
+    // if (!accessToken) {
+    //   return res.json(errorResponse("No Gitlab access token"));
+    // }
 
-    // Tạo GitLab API client an toàn
-    const api = await safeGitlabClient(account._id);
+    // // Tạo GitLab API client an toàn
+    // const api = await safeGitlabClient(account._id);
 
-    // Lấy danh sách repository từ GitLab
-    const repos = await api.Projects.all({
-      owned: true, // Chỉ lấy repo mà user sở hữu
-      orderBy: "name",
-      sort: "asc",
-    });
+    // // Lấy danh sách repository từ GitLab
+    // const repos = await api.Projects.all({
+    //   owned: true, // Chỉ lấy repo mà user sở hữu
+    //   orderBy: "name",
+    //   sort: "asc",
+    // });
 
-    // Định dạng dữ liệu trước khi trả về client
-    const formattedRepos = repos.map(({ visibility, owner, path_with_namespace, web_url }) => ({
-      name: path_with_namespace,
-      url: web_url,
-      status: visibility,
-      owner: owner.name,
-    }));
+    // // Định dạng dữ liệu trước khi trả về client
+    // const formattedRepos = repos.map(({ visibility, owner, path_with_namespace, web_url }) => ({
+    //   name: path_with_namespace,
+    //   url: web_url,
+    //   status: visibility,
+    //   owner: owner.name,
+    // }));
 
-    return res.json(successResponse(formattedRepos, "Gitlab repos found"));
+    //return res.json(successResponse(formattedRepos, "Gitlab repos found"));
   } catch (error) {
     return res.json(errorResponse(`Internal server error: ${error}`));
   }

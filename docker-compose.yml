@@ -1,0 +1,28 @@
+version: '3.8'
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "6800:6800"  # Map host port 6800 to container port 6800
+    environment:
+      - NODE_ENV=production
+      - MONGO_URL=mongodb://host.docker.internal:27017/base_project
+      - REDIS_URL=redis://default:UBhjGuvFkdq8oWQkE60F8b1Pr5HTUr4f@redis-17741.c290.ap-northeast-1-2.ec2.redns.redis-cloud.com:17741
+      - CLIENT_URL=http://host.docker.internal:5173
+      - SERVER_URL=http://host.docker.internal:6800
+      - SESSION_SECRET=sessionsecret
+      - GITHUB_CLIENT_ID=Ov23liSLNA29h1Eqximz
+      - GITHUB_CLIENT_SECRET=e3ffacbbdfc30346d8098cd202f5e25d09481f36
+      - GITLAB_CLIENT_ID=98606d98fc35eddd6bb6ebe175df602b426eba0c57759964e973b2716d45be20
+      - GITLAB_CLIENT_SECRET=dfecba8ca4dc2d2db779a2ae278bc5ea50d72cec9418dce11e16d3dbfe708478
+      - IMAGE_SCANNING_URL=http://host.docker.internal:3000
+      - PORT=6800
+    networks:
+      - backend-network
+
+networks:
+  backend-network:
+    driver: bridge

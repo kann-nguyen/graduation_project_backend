@@ -1,5 +1,5 @@
 import { Request, Response } from "express";
-import MyOctokit from "../octokit";
+import getOctokit, { createOctokitClient } from "../octokit";
 import { errorResponse, successResponse } from "../utils/responseFormat";
 import { Gitlab } from "@gitbeaker/rest";
 import { ProjectModel } from "../models/models";
@@ -18,9 +18,9 @@ export async function getWorkflows(req: Request, res: Response) {
     const accessToken = req.user?.thirdParty.find(
       (x) => x.name === "Github"
     )?.accessToken;
-    const octokit = new MyOctokit({
-      auth: accessToken,
-    });
+    
+    // Use the convenience function to create a client
+    const octokit = await createOctokitClient(accessToken || '');
     try {
       let workflows = await getGithubWorkflows(octokit, owner, repo);
       return res.json(
@@ -29,17 +29,18 @@ export async function getWorkflows(req: Request, res: Response) {
     } catch (error) {
       return res.json(errorResponse("Failed to fetch workflows"));
     }
-  } else if (url.includes("gitlab")) {
-    const api = await safeGitlabClient(req.user?._id);
-    try {
-      let workflows = await getGitlabWorkflows(api, projectName);
-      return res.json(
-        successResponse(workflows, "Successfully fetched workflows")
-      );
-    } catch (error) {
-      console.log(error);
-      return res.json(errorResponse("Failed to fetch workflows"));
-    }
+    // } else if (url.includes("gitlab")) {
+    //   const api = await safeGitlabClient(req.user?._id);
+    //   try {
+    //     let workflows = await getGitlabWorkflows(api, projectName);
+    //     return res.json(
+    //       successResponse(workflows, "Successfully fetched workflows")
+    //     );
+    //   } catch (error) {
+    //     console.log(error);
+    //     return res.json(errorResponse("Failed to fetch workflows"));
+    //   }
+    // }
   }
 }
 
@@ -141,94 +142,95 @@ export async function pushNewWorkflow(req: Request, res: Response) {
       console.log(error);
       return res.json(errorResponse("Failed to push workflow"));
     }
-  } else if (url.includes("gitlab")) {
-    const api = await safeGitlabClient(req.user?._id);
+    // } else if (url.includes("gitlab")) {
+    //   const api = await safeGitlabClient(req.user?._id);
+    //   try {
+    //     const projectData = await api.Projects.show(projectName);
+    //     const defaultBranch = projectData.default_branch;
+    //     const targetBranch = branch || defaultBranch;
+    //     const branchExists = await checkBranchExistsGitlab(
+    //       api,
+    //       projectName,
+    //       targetBranch
+    //     );
+    //     if (!branchExists) {
+    //       await createBranchGitlab(api, projectName, targetBranch, defaultBranch);
+    //     }
+    //     await api.RepositoryFiles.edit(
+    //       projectName,
+    //       data.path,
+    //       targetBranch,
+    //       data.content,
+    //       message
+    //     );
+    //     return res.json(successResponse(null, "Successfully pushed workflow"));
+    //   } catch (error) {
+    //     console.log(error);
+    //     return res.json(errorResponse("Failed to push workflow"));
+    //   }
+    // }
+  }
+
+
+  async function checkBranchExistsGithub(
+    octo: OctokitType,
+    org: string,
+    repo: string,
+    branch: string
+  ) {
     try {
-      const projectData = await api.Projects.show(projectName);
-      const defaultBranch = projectData.default_branch;
-      const targetBranch = branch || defaultBranch;
-      const branchExists = await checkBranchExistsGitlab(
-        api,
-        projectName,
-        targetBranch
-      );
-      if (!branchExists) {
-        await createBranchGitlab(api, projectName, targetBranch, defaultBranch);
+      await octo.rest.repos.getBranch({
+        owner: org,
+        repo,
+        branch,
+      });
+      return true; // Branch exists
+    } catch (error: any) {
+      if (error.status === 404) {
+        return false; // Branch doesn't exist
       }
-      await api.RepositoryFiles.edit(
-        projectName,
-        data.path,
-        targetBranch,
-        data.content,
-        message
-      );
-      return res.json(successResponse(null, "Successfully pushed workflow"));
-    } catch (error) {
-      console.log(error);
-      return res.json(errorResponse("Failed to push workflow"));
+      throw error; // Other error occurred
     }
   }
-}
-
-
-async function checkBranchExistsGithub(
-  octo: OctokitType,
-  org: string,
-  repo: string,
-  branch: string
-) {
-  try {
-    await octo.rest.repos.getBranch({
+  async function checkBranchExistsGitlab(
+    api: GitlabType,
+    projectId: string,
+    branch: string
+  ) {
+    try {
+      await api.Branches.show(projectId, branch);
+      return true; // Branch exists
+    } catch (error: any) {
+      return false;
+    }
+  }
+  async function createBranchGitlab(
+    api: GitlabType,
+    projectId: string,
+    branch: string,
+    baseBranch: string
+  ) {
+    await api.Branches.create(projectId, branch, baseBranch);
+  }
+  async function createBranchGithub(
+    octo: OctokitType,
+    org: string,
+    repo: string,
+    branch: string,
+    baseBranch: string
+  ) {
+    const { data: baseRefData } = await octo.rest.git.getRef({
       owner: org,
       repo,
-      branch,
+      ref: `heads/${baseBranch}`,
     });
-    return true; // Branch exists
-  } catch (error: any) {
-    if (error.status === 404) {
-      return false; // Branch doesn't exist
-    }
-    throw error; // Other error occurred
-  }
-}
-async function checkBranchExistsGitlab(
-  api: GitlabType,
-  projectId: string,
-  branch: string
-) {
-  try {
-    await api.Branches.show(projectId, branch);
-    return true; // Branch exists
-  } catch (error: any) {
-    return false;
-  }
-}
-async function createBranchGitlab(
-  api: GitlabType,
-  projectId: string,
-  branch: string,
-  baseBranch: string
-) {
-  await api.Branches.create(projectId, branch, baseBranch);
-}
-async function createBranchGithub(
-  octo: OctokitType,
-  org: string,
-  repo: string,
-  branch: string,
-  baseBranch: string
-) {
-  const { data: baseRefData } = await octo.rest.git.getRef({
-    owner: org,
-    repo,
-    ref: `heads/${baseBranch}`,
-  });
-  const baseCommitSha = baseRefData.object.sha;
+    const baseCommitSha = baseRefData.object.sha;
 
-  await octo.rest.git.createRef({
-    owner: org,
-    repo,
-    ref: `refs/heads/${branch}`,
-    sha: baseCommitSha,
-  });
+    await octo.rest.git.createRef({
+      owner: org,
+      repo,
+      ref: `refs/heads/${branch}`,
+      sha: baseCommitSha,
+    });
+  }
 }

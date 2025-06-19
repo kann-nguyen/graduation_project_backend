@@ -1,6 +1,6 @@
 import axios from "axios";
 import { ArtifactModel, ProjectModel } from "../models/models";
-import MyOctokit from "../octokit";
+import getOctokit, { createOctokitClient } from "../octokit";
 import { Result } from "./vulnType";
 import { Gitlab } from "@gitbeaker/rest";
 import { Types } from "mongoose";
@@ -60,7 +60,7 @@ export async function importGithubScanResult(
       repo,
     }); // Gọi API GitHub để lấy danh sách cảnh báo bảo mật
 
-    const vulns = data.map((v) => {
+    const vulns = data.map((v: { rule?: OverrideType; most_recent_instance?: any; }) => {
       const {
         rule: { id, description, tags, security_severity_level: severity },
       } = v as {
@@ -110,35 +110,35 @@ export async function importGitlabScanResult(
   accountId: Types.ObjectId | undefined,
   url: string
 ) {
-  const api = await safeGitlabClient(accountId); // Lấy client GitLab an toàn
-  try {
-    const project = await ProjectModel.findOne({ url }); // Tìm dự án trong database
-    if (!project) return false; // Nếu không tìm thấy, trả về false
+  // const api = await safeGitlabClient(accountId); // Lấy client GitLab an toàn
+  // try {
+  //   const project = await ProjectModel.findOne({ url }); // Tìm dự án trong database
+  //   if (!project) return false; // Nếu không tìm thấy, trả về false
     
-    const projectId = encodeURIComponent(project.name); // Mã hóa tên dự án để dùng trong API
-    const data = await api.ProjectVulnerabilities.all(projectId); // Lấy danh sách lỗ hổng từ GitLab
+  //   const projectId = encodeURIComponent(project.name); // Mã hóa tên dự án để dùng trong API
+  //   const data = await api.ProjectVulnerabilities.all(projectId); // Lấy danh sách lỗ hổng từ GitLab
     
-    const vulns = data.map((v) => ({
-      cveId: v.id,
-      description: v.description,
-      severity: v.severity,
-      cwes: [],
-    }));
+  //   const vulns = data.map((v) => ({
+  //     cveId: v.id,
+  //     description: v.description,
+  //     severity: v.severity,
+  //     cwes: [],
+  //   }));
     
-    // Cập nhật danh sách lỗ hổng vào database
-    await ArtifactModel.updateOne(
-      {
-        url,
-      },
-      {
-        $set: {
-          vulnerabilityList: vulns,
-        },
-      }
-    );
-    return true;
-  } catch (error) {
-    console.log(error);
-    return false; // Trả về false nếu có lỗi xảy ra
-  }
+  //   // Cập nhật danh sách lỗ hổng vào database
+  //   await ArtifactModel.updateOne(
+  //     {
+  //       url,
+  //     },
+  //     {
+  //       $set: {
+  //         vulnerabilityList: vulns,
+  //       },
+  //     }
+  //   );
+  //   return true;
+  // } catch (error) {
+  //   console.log(error);
+  //   return false; // Trả về false nếu có lỗi xảy ra
+  // }
 }

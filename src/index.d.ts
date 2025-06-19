@@ -1,6 +1,6 @@
 import { Account } from "../src/models/account";
 import { Gitlab } from "@gitbeaker/rest";
-import MyOctokit from "./octokit";
+import getOctokit from "./octokit";
 
 declare global {
   namespace Express {
@@ -9,4 +9,5 @@ declare global {
 }
 export {};
 export type GitlabType = InstanceType<typeof Gitlab>;
-export type OctokitType = InstanceType<typeof MyOctokit>;
+// Updated to handle the async function that returns Octokit
+export type OctokitType = Awaited<ReturnType<typeof getOctokit>>;

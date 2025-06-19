@@ -1,21 +1,28 @@
-# Use official Node.js image
 FROM node:18
 
-# Set working directory
 WORKDIR /app
 
-# Copy package.json and install dependencies
+# Install build dependencies for native modules like bcrypt
+RUN apt-get update && apt-get install -y python3 make g++ && rm -rf /var/lib/apt/lists/*
+
+# Copy package files and install dependencies
 COPY package.json package-lock.json ./
-RUN npm install
+RUN npm ci
 
 # Copy all project files
 COPY . .
 
-# Build project (nếu cần)
+# Build project
 RUN npm run build
 
-# Expose port (nếu cần, ví dụ: 3000)
-EXPOSE 3001
+# Make sure JSON files are copied to dist
+RUN mkdir -p dist/utils && \
+    cp -r src/utils/*.json dist/utils/ && \
+    ls -la dist/utils/ && \
+    ls -la src/utils/
+
+# Expose the correct port
+EXPOSE 6800
 
 # Start application
-CMD ["npm", "start"]
+CMD ["node", "dist/server.js"]
