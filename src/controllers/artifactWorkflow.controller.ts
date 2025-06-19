@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import { ArtifactModel, TicketModel } from '../models/models';
+import { ArtifactModel, ProjectModel, TicketModel } from '../models/models';
 import { Artifact } from '../models/artifact';
 import mongoose from 'mongoose';
 import { Ticket } from '../models/ticket';
@@ -45,33 +45,78 @@ export class ArtifactWorkflowController {      public static async getWorkflowHi
         message: error.message || 'Failed to fetch workflow history'
       });
     }
-  }
-  public static async getProjectWorkflowStats(req: Request, res: Response) {
+  }  public static async getProjectWorkflowStats(req: Request, res: Response) {
     try {
-      const { projectId } = req.params;
+      // Extract the full URL to get the actual project name with path
+      const fullUrl = req.originalUrl;
+      console.log(`[DEBUG] Full URL: ${fullUrl}`);
       
-      const stats = await ArtifactWorkflowController._getProjectWorkflowStats(projectId);
+      // Extract the project name from URL - it's between /projects/ and /workflow/
+      const projectMatch = fullUrl.match(/\/projects\/(.+?)\/workflow\//);
+      const fullProjectName = projectMatch ? projectMatch[1] : '';
+      
+      console.log(`[DEBUG] Extracted full project name: ${fullProjectName}`);
+      
+      // The URL pattern might include encoded slashes in the project name
+      const decodedProjectName = fullProjectName ? decodeURIComponent(fullProjectName) : '';
+      
+      console.log(`[INFO] Getting workflow stats for project: ${decodedProjectName}`);
+      
+      // Find the project by name first
+      const project = await ProjectModel.findOne({ name: decodedProjectName });
+      
+      if (!project) {
+        return res.status(404).json({
+          success: false,
+          message: `Project not found: ${decodedProjectName}`
+        });
+      }
+      
+      // Use the project ID from the found project
+      const stats = await ArtifactWorkflowController._getProjectWorkflowStats(project._id);
       
       return res.status(200).json({
         success: true,
         data: stats
       });
     } catch (error: any) {
+      console.error(`[ERROR] Failed to fetch project workflow stats:`, error);
       return res.status(500).json({
         success: false,
         message: error.message || 'Failed to fetch project workflow stats'
       });
     }
-  }
-  public static async getArtifactsByWorkflowStep(req: Request, res: Response) {
+  }  public static async getArtifactsByWorkflowStep(req: Request, res: Response) {
     try {
-      const { projectId } = req.params;
       const { step } = req.query;
       
-      const stepNumber = step ? parseInt(step as string) : undefined;
+      // Extract the full URL to get the actual project name with path
+      const fullUrl = req.originalUrl;
+      console.log(`[DEBUG] Full URL: ${fullUrl}`);
+      
+      // Extract the project name from URL - it's between /projects/ and /workflow/
+      const projectMatch = fullUrl.match(/\/projects\/(.+?)\/workflow\//);
+      const fullProjectName = projectMatch ? projectMatch[1] : '';
+      
+      console.log(`[DEBUG] Extracted full project name: ${fullProjectName}`);
+      
+      // The URL pattern might include encoded slashes in the project name
+      const decodedProjectName = fullProjectName ? decodeURIComponent(fullProjectName) : '';
+      
+      console.log(`[INFO] Getting artifacts by workflow step for project: ${decodedProjectName}`);
+      
+      // Find the project by name first
+      const project = await ProjectModel.findOne({ name: decodedProjectName });
+        if (!project) {
+        return res.status(404).json({
+          success: false,
+          message: `Project not found: ${decodedProjectName}`
+        });
+      }
+        const stepNumber = step ? parseInt(step as string) : undefined;
       
       // Find artifacts in the specified project and step
-      const query: any = { projectId };
+      const query: any = { projectId: project._id };
       if (stepNumber && stepNumber >= 1 && stepNumber <= 5) {
         query.currentWorkflowStep = stepNumber;
       }
