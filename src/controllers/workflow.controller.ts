@@ -1,5 +1,5 @@
 import { Request, Response } from "express";
-import getOctokit, { createOctokitClient } from "../octokit";
+import createOctokitClient from "../octokit";
 import { errorResponse, successResponse } from "../utils/responseFormat";
 import { Gitlab } from "@gitbeaker/rest";
 import { ProjectModel } from "../models/models";

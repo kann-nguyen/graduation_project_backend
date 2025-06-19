@@ -1,5 +1,5 @@
 import { Gitlab } from "@gitbeaker/rest";
-import getOctokit, { createOctokitClient } from "../octokit";
+import createOctokitClient from "../octokit";
 import axios from "axios";
 import { AccountModel } from "../models/models";
 import { Types } from "mongoose";

@@ -7,7 +7,7 @@ import {
   UserModel,
 } from "../models/models";
 import { Project } from "../models/project";
-import getOctokit, { createOctokitClient } from "../octokit";
+import createOctokitClient from "../octokit";
 import redis from "../redis";
 import { errorResponse, successResponse } from "../utils/responseFormat";
 import { GitlabType, OctokitType } from "..";

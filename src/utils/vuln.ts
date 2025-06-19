@@ -1,6 +1,6 @@
 import axios from "axios";
 import { ArtifactModel, ProjectModel } from "../models/models";
-import getOctokit, { createOctokitClient } from "../octokit";
+import createOctokitClient from "../octokit";
 import { Result } from "./vulnType";
 import { Gitlab } from "@gitbeaker/rest";
 import { Types } from "mongoose";

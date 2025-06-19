@@ -97,16 +97,11 @@ export async function getReposFromGithub(req: Request, res: Response) {
     });
 
     // Định dạng dữ liệu trước khi trả về client
-    const formattedRepos = repos.data.map(({ html_url, visibility, owner, full_name }: {
-      html_url: string;
-      visibility: string;
-      owner: { login: string };
-      full_name: string;
-    }) => ({
-      name: full_name,
-      url: html_url,
-      status: visibility,
-      owner: owner.login,
+    const formattedRepos = repos.data.map((repo) => ({
+      name: repo.full_name,
+      url: repo.html_url,
+      status: repo.visibility || 'unknown',
+      owner: repo.owner.login,
     }));
 
     return res.json(successResponse(formattedRepos, "Github repos found"));

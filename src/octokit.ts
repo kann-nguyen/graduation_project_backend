@@ -1,26 +1,27 @@
-// Create a singleton instance of the Octokit class for reuse
-let OctokitSingleton: any = null;
+/**
+ * This module provides a wrapper for Octokit that handles the ESM/CommonJS compatibility issue.
+ * We use a special JS file for ESM loading to avoid TypeScript compilation issues.
+ */
 
-// Create a function that will initialize the Octokit instance
-async function createOctokit() {
-  // Use dynamic imports for ESM modules
-  const { Octokit } = await import("@octokit/core");
-  const { paginateRest } = await import("@octokit/plugin-paginate-rest");
-  const { restEndpointMethods } = await import("@octokit/plugin-rest-endpoint-methods");
+// Import the loader function (will be directly used in production)
+// In dev, this will be loaded by TypeScript
+// In prod, this will be a direct require of the copied JS file
+import { createOctokitClient as loader } from './utils/octokit-esm-loader';
 
-  return Octokit.plugin(paginateRest, restEndpointMethods);
-}
-
-// Export the function that creates and returns a configured Octokit instance
-export default async function getOctokit() {
-  if (!OctokitSingleton) {
-    OctokitSingleton = await createOctokit();
+/**
+ * Create an Octokit client with the provided authentication token
+ * 
+ * @param auth - Authentication token (optional)
+ * @returns A Promise that resolves to an authenticated Octokit instance
+ */
+export async function createOctokitClient(auth?: string) {
+  try {
+    return await loader(auth);
+  } catch (error) {
+    console.error('Failed to create Octokit client:', error);
+    throw error;
   }
-  return OctokitSingleton;
 }
 
-// Convenience function to create an authenticated client
-export async function createOctokitClient(auth: string) {
-  const OctokitClass = await getOctokit();
-  return new OctokitClass({ auth });
-}
+// For backward compatibility with existing code
+export default createOctokitClient;

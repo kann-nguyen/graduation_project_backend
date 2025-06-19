@@ -15,11 +15,16 @@ COPY . .
 # Build project
 RUN npm run build
 
-# Make sure JSON files are copied to dist
+# Make sure JSON files and JS files are copied to dist
 RUN mkdir -p dist/utils && \
     cp -r src/utils/*.json dist/utils/ && \
+    cp src/utils/octokit-esm-loader.js dist/utils/ && \
     ls -la dist/utils/ && \
-    ls -la src/utils/
+    ls -la src/utils/ && \
+    echo "Content of dist folder:" && \
+    find dist -type f | sort&& \
+    echo "Content of dist folder:" && \
+    find dist -type f | sort
 
 # Expose the correct port
 EXPOSE 6800
