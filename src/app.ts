@@ -35,6 +35,11 @@ migrateArtifactsState();
 
 envVariables.parse(process.env);
 const app = express();
+
+// Configure trust proxy more securely for Docker environment
+// Only trust the first proxy (Docker's internal network)
+app.set('trust proxy', 1);
+
 app.use(express.json({ limit: '10mb' }));
 app.use(
   cors({
@@ -49,7 +54,8 @@ app.use(morgan("dev"));
 const limiter = rateLimit({
   windowMs: 1 * 60 * 1000, // 1 minute
   max: 150, // limit each IP to 150 requests per windowMs
-});
+  }
+);
 app.use(limiter);
 app.get("/", (req: Request, res: Response) => {
   res.send("server-dashboard API. Start using with /{resource}");
