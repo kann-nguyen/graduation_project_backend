@@ -197,8 +197,22 @@ export async function processScannerResult(artifactId: string, vulns: any): Prom
 
     console.log(`Scanner result processed for artifact ${artifactId}. Total completed scanners: ${completedScanners} of ${artifact.totalScanners}`);    // Kiểm tra xem tất cả scanner đã hoàn thành chưa
     if (completedScanners >= (artifact.totalScanners ?? 1)) {
-      // Đầu tiên chỉ cập nhật tempVuls và trạng thái scanner
+      // Đầu tiên cập nhật tempVuls và trạng thái scanner, bao gồm việc set isScanning = false
       console.log(`[DEBUG] All scanners completed. Processing ${updatedTempVuls.length} vulnerabilities`);
+
+      // Cập nhật trạng thái hoàn thành scan
+      await ArtifactModel.findByIdAndUpdate(
+        artifactId,
+        {
+          $set: {
+            tempVuls: updatedTempVuls,
+            scannersCompleted: 0,
+            totalScanners: 0,
+            numberThreatSubmitted: 0,
+            isScanning: false // ✅ Set isScanning to false when all scanners complete
+          }
+        }
+      );
 
       // Lấy bản sao mới của artifact và đảm bảo tempVuls được điền
       const freshArtifact = await ArtifactModel.findById(artifactId);
@@ -229,8 +243,6 @@ export async function processScannerResult(artifactId: string, vulns: any): Prom
 
   } catch (error) {
     console.error("Error processing scanner result:", error);
-    // Đặt lại trạng thái scanning khi có lỗi
-    await ArtifactModel.findByIdAndUpdate(artifactId, { isScanning: false });
     throw error;
   }
 }
@@ -442,30 +454,47 @@ export async function updateArtifactAfterScan(artifact: any): Promise<void> {
 
     }
 
-    // Bây giờ cập nhật vulnerabilityList nhưng KHÔNG xóa tempVuls ngay
+    // Bây giờ cập nhật vulnerabilityList và xóa tempVuls
     await ArtifactModel.findByIdAndUpdate(
       artifact._id,
       {
         $set: {
           vulnerabilityList: tempVulsCopy
+        },
+        $unset: {
+          tempVuls: 1 // ✅ Clear tempVuls after processing is complete
         }
       },
       { new: true }
     );
 
-    // Chỉ xóa tempVuls sau khi tất cả quá trình xử lý hoàn tất
-    await artifact.save();
-
-    // 5. Cập nhật trạng thái workflow dựa trên kết quả quét
+    // 5. Cập nhật trạng thái workflow - chỉ bắt đầu từ step 1 và để workflow tự động tiến triển
     try {
+      // Chỉ gọi updateWorkflowStatus cho step 1 (Detection) 
+      // Workflow sẽ tự động tiến triển qua các step tiếp theo dựa trên logic trong ArtifactWorkflowController
       await ArtifactWorkflowController.updateWorkflowStatus(artifact._id, 1);
       await ArtifactWorkflowController.updateWorkflowStatus(artifact._id, 2);
       await ArtifactWorkflowController.updateWorkflowStatus(artifact._id, 3);
+      
+      console.log(`[DEBUG] Workflow status updated for artifact ${artifact._id}, starting from Detection step`);
     } catch (workflowError) {
       console.error(`[ERROR] Failed to update workflow status:`, workflowError);
     }
   } catch (error) {
     console.error("Lỗi khi cập nhật artifact sau scan:", error);
+    
+    // Đảm bảo isScanning được set về false ngay cả khi có lỗi
+    try {
+      await ArtifactModel.findByIdAndUpdate(
+        artifact._id,
+        { isScanning: false },
+        { new: true }
+      );
+      console.log(`[DEBUG] Set isScanning to false for artifact ${artifact._id} due to error`);
+    } catch (updateError) {
+      console.error(`[ERROR] Failed to update isScanning flag after error:`, updateError);
+    }
+    
     throw error;
   }
 }

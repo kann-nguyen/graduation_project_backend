@@ -209,7 +209,7 @@ export class ArtifactWorkflowController {
       startedAt: new Date(),
       // Khởi tạo tất cả các bước để đảm bảo chúng tồn tại trong cả currentWorkflowCycle và mảng workflowCycles
       detection: {
-        // completedAt: new Date(), // Detection được hoàn thành khi chu kỳ bắt đầu
+        completedAt: new Date(), // Detection được hoàn thành khi chu kỳ bắt đầu
         numberVuls: artifact.vulnerabilityList?.length || 0, // Khởi tạo với số lượng vulnerability hiện tại
         listVuls: []
       },

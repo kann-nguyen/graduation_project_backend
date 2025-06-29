@@ -522,6 +522,7 @@ export async function suggestAssigneeFromThreatType(projectId: string, threatTyp
     const managerConfigThreshold = artifact.rateReScan || 50;
 
     if (submittedRatio >= managerConfigThreshold && (artifact.totalScanners ?? 0) <= 0) {
+      console.log(`Artifact ${artifact._id} has reached the rescan threshold: ${submittedRatio}% >= ${managerConfigThreshold}%`);
       // Tìm phase chứa artifact này
       const phase = await PhaseModel.findOne({ artifacts: artifact._id });
       if (!phase) {
