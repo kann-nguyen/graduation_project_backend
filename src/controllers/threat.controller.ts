@@ -2,7 +2,73 @@ import { Request, Response } from "express";
 import mongoose from "mongoose";
 import { ArtifactModel, ThreatModel } from "../models/models";
 import { errorResponse, successResponse } from "../utils/responseFormat";
+import path from "path";
+import * as fs from "fs/promises";
+import { Threat } from "../models/threat";
+import { Vulnerability } from "../models/vulnerability";
 
+//////////////////////////
+type ThreatType =
+  | "Spoofing"
+  | "Tampering"
+  | "Repudiation"
+  | "Information Disclosure"
+  | "Denial of Service"
+  | "Elevation of Privilege";
+
+type VotingSource = "CWE" | "Keyword" | "Severity";
+
+// Mẫu từ khóa cho từng loại mối đe dọa
+const keywordPatterns = {
+  "Elevation of Privilege": /\b(privilege|permission|access control|unauthorized|admin|root|sudo)\b/,
+  "Spoofing": /\b(spoof|impersonat|authentica|identity|credential|phish|forge)\b/,
+  "Tampering": /\b(tamper|modify|alter|change|corrupt|inject|manipulate)\b/,
+  "Repudiation": /\b(repudiat|logging|audit|track|monitor|log file|activity)\b/,
+  "Information Disclosure": /\b(disclosure|leak|expose|sensitive|confidential|private|plaintext)\b/,
+  "Denial of Service": /\b(denial|dos|crash|exhaust|flood|unavailable|resource)\b/
+};
+
+const severityMappings: Record<string, ThreatType[]> = {
+  "CRITICAL": ["Elevation of Privilege", "Information Disclosure"],
+  "HIGH": ["Information Disclosure", "Denial of Service"],
+  "MEDIUM": ["Tampering", "Repudiation"],
+  "LOW": ["Repudiation", "Spoofing"]
+};
+
+interface Vote {
+  type: ThreatType;
+  source: VotingSource;
+  weight: number;
+}
+
+// Quy tắc trọng số bầu chọn
+const sourceWeights: Record<VotingSource, number> = {
+  CWE: 3,
+  Keyword: 2,
+  Severity: 1,
+};
+
+//https://www.researchgate.net/publication/351864310_Towards_Practical_Cybersecurity_Mapping_of_STRIDE_and_CWE_-_a_Multi-perspective_Approach
+export async function loadCweMapping(): Promise<Record<string, ThreatType[]>> {
+  try {
+    // Giải quyết đường dẫn đến file JSON
+    const filePath = path.resolve("src\\utils\\cweToStride.json");
+    // Đọc nội dung file dưới dạng chuỗi UTF-8
+    const data = await fs.readFile(filePath, "utf8");
+    // Phân tích nội dung JSON thành đối tượng
+    const mapping: Record<string, ThreatType[]> = JSON.parse(data);
+    return mapping;
+  } catch (err) {
+    console.error("Failed to load CWE mapping:", err);
+    return {};
+  }
+}
+
+let cweToStrideMap: any;
+
+(async () => {
+  cweToStrideMap = await loadCweMapping();
+})();
 
 // Score calculation interface
 interface ScoreComponents {
@@ -101,6 +167,125 @@ export async function update(req: Request, res: Response) {
     return res.json(errorResponse(`Internal server error: ${error}`));
   }
 }
+
+// Tạo threat từ vulnerability
+export function createThreatFromVuln(vuln: any): Partial<Threat> {
+  const votes = getVotes(vuln);
+  const threatType = resolveThreatType(votes);
+
+  // Tính toán điểm số ban đầu dựa trên dữ liệu vulnerability
+  let scoreData;
+  try {
+    // Import hàm tính toán từ threatModeling.controller
+    scoreData = calculateScoresFromVulnerability(vuln);
+  } catch (error) {
+    console.error("Error calculating initial threat scores:", error);
+    // Fallback về điểm số mặc định nếu tính toán thất bại
+    scoreData = {
+      total: vuln.score ? vuln.score / 2 : 2.5, // Chuyển đổi CVSS (0-10) sang thang đo của chúng ta (0-5)
+      details: {
+        damage: 2.5,
+        reproducibility: 2.5,
+        exploitability: 2.5,
+        affectedUsers: 2.5,
+        discoverability: 2.5,
+      }
+    };
+  }
+
+  return {
+    name: vuln.cveId,
+    description: vuln.description ?? "Have no des",
+    type: threatType ?? "Spoofing",
+    status: "Non mitigated",
+    score: scoreData,
+  };
+}
+
+/**
+ * Thu thập tất cả các "phiếu bầu" (votes) tiềm năng cho một lỗ hổng bảo mật
+ * @param vuln Đối tượng lỗ hổng cần phân tích
+ * @returns Mảng các phiếu bầu với trọng số tương ứng
+ */
+export function getVotes(vuln: Vulnerability): Vote[] {
+  const votes: Vote[] = [];
+
+  // === (1) Ánh xạ CWE thành STRIDE ===
+  // Phân tích mã CWE và ánh xạ thành các loại mối đe dọa tương ứng
+  // Trọng số cao nhất (3) vì CWE là tiêu chuẩn phân loại lỗ hổng đáng tin cậy
+  for (const cwe of vuln.cwes || []) {
+    const mappedTypes = cweToStrideMap[cwe];
+    if (mappedTypes) {
+      for (const mappedType of mappedTypes) {
+        votes.push({
+          type: mappedType as ThreatType,
+          source: "CWE",
+          weight: sourceWeights["CWE"], // Trọng số = 3
+        });
+      }
+    }
+  }
+
+  // === (2) Phân tích từ khóa trong mô tả ===
+  // Tìm kiếm từ khóa đặc trưng trong mô tả lỗ hổng
+  // Trọng số trung bình (2) vì dựa trên phân tích ngữ nghĩa
+  const desc = vuln.description?.toLowerCase() || "";
+
+  // Kiểm tra từng mẫu và thêm vote nếu tìm thấy
+  for (const [threatType, pattern] of Object.entries(keywordPatterns)) {
+    if (pattern.test(desc)) {
+      votes.push({
+        type: threatType as ThreatType,
+        source: "Keyword",
+        weight: sourceWeights["Keyword"] // Trọng số = 2
+      });
+    }
+  }
+
+  // === (3) Suy luận từ mức độ nghiêm trọng ===
+  // Ánh xạ mức độ nghiêm trọng thành các loại mối đe dọa
+  // Trọng số thấp nhất (1) vì đây là phương pháp suy luận đơn giản nhất
+
+  if (vuln.severity) {
+    const mappedTypes = severityMappings[vuln.severity.toUpperCase()];
+    if (mappedTypes) {
+      for (const mappedType of mappedTypes) {
+        votes.push({
+          type: mappedType,
+          source: "Severity",
+          weight: sourceWeights["Severity"] // Trọng số = 1
+        });
+      }
+    }
+  }
+
+  return votes;
+}
+
+/**
+ * Xác định loại threat có khả năng xảy ra nhất từ các phiếu bầu
+ * @param votes Mảng các phiếu bầu đã thu thập
+ * @returns Loại threat phù hợp nhất hoặc null nếu không thể xác định
+ */
+export function resolveThreatType(votes: Vote[]): ThreatType | null {
+  // Khởi tạo bản đồ điểm số cho từng loại mối đe dọa
+  const scoreMap: Record<ThreatType, number> = {} as Record<ThreatType, number>;
+
+  // Tính tổng điểm cho từng loại mối đe dọa
+  for (const vote of votes) {
+    scoreMap[vote.type] = (scoreMap[vote.type] || 0) + vote.weight;
+  }
+
+  // Sắp xếp các mối đe dọa theo điểm số giảm dần
+  const sorted = Object.entries(scoreMap).sort((a, b) => b[1] - a[1]);
+
+  // Nếu không có vote nào, trả về null
+  if (sorted.length === 0) return null;
+
+  // Nếu không có ưu tiên cụ thể nào khớp, trả về mối đe dọa có điểm cao nhất
+  return sorted[0][0] as ThreatType;
+}
+
 
 /**
  * Calculate threat scores based on vulnerability data using the DREAD model

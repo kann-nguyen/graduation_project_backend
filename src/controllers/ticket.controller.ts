@@ -19,7 +19,7 @@ export async function getAll(req: Request, res: Response) {
   }
 
   try {
-    // Get the user and their account to check role
+    // Lấy thông tin user và account để kiểm tra quyền
     const user = await UserModel.findOne({ account: accountId });
     if (!user) {
       return res.json(errorResponse("User not found"));
@@ -30,13 +30,13 @@ export async function getAll(req: Request, res: Response) {
       return res.json(errorResponse("Account not found"));
     }
 
-    // Create base query for tickets
+    // Tạo query cơ bản cho tickets
     let query: { projectName: string; assignee?: string; status?: { $nin?: string[] } } = { 
       projectName: projectName as string 
     };
     
     if (account.role === "member") {
-      // Regular member can only see tickets assigned to them
+      // Member thường chỉ có thể xem tickets được gán cho họ
       query.assignee = user._id.toString();
       query.status = { $nin: ["Not accepted", "Resolved"] };
     }
@@ -110,7 +110,7 @@ export async function create(req: Request, res: Response) {
       }
     }
 
-    // Set initial status and make sure previousStatus is the same as initial status
+    // Đặt trạng thái ban đầu và đảm bảo previousStatus giống với trạng thái ban đầu
     const initialStatus = data.status || "Not accepted";
     
     const ticket = await TicketModel.create({
@@ -119,7 +119,7 @@ export async function create(req: Request, res: Response) {
       assignee: assigneeId,
       assigner: user._id,
       status: initialStatus,
-      previousStatus: initialStatus // Set previousStatus to same as initial status
+      previousStatus: initialStatus // Đặt previousStatus giống với trạng thái ban đầu
     });
 
     if (submit && data.assignee && data.assignee.trim().length > 0) {
@@ -139,11 +139,15 @@ export async function create(req: Request, res: Response) {
     return res.json(successResponse(ticket, "Ticket created successfully"));
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
-    console.error(`❌ Error creating ticket: ${errorMessage}`);
     return res.json(errorResponse(`Internal server error: ${errorMessage}`));
   }
 }
 
+/**
+ * Tự động tạo ticket từ threat
+ * @param artifactId - ID của artifact
+ * @param threatId - ID của threat
+ */
 export async function autoCreateTicketFromThreat(artifactId: any, threatId: any) {
   try {
     const threat = await ThreatModel.findById(threatId);
@@ -171,7 +175,7 @@ export async function autoCreateTicketFromThreat(artifactId: any, threatId: any)
     const suggested = await suggestAssigneeFromThreatType(artifact.projectId.toString(), threat.type);
     const project = await ProjectModel.findById(artifact.projectId);
 
-    // Set initial status for auto-created tickets
+    // Đặt trạng thái ban đầu cho tickets tự động tạo
     const initialStatus = "Not accepted";
 
     const ticket = await TicketModel.create({
@@ -183,7 +187,7 @@ export async function autoCreateTicketFromThreat(artifactId: any, threatId: any)
       projectName: project?.name || "Unknown Project",
       targetedThreat: threatId,
       status: initialStatus,
-      previousStatus: initialStatus, // Set previousStatus same as initial status
+      previousStatus: initialStatus, // Đặt previousStatus giống với trạng thái ban đầu
       priority: priority,
     });
 
@@ -196,29 +200,30 @@ export async function autoCreateTicketFromThreat(artifactId: any, threatId: any)
     });
 
   } catch (error) {
-    if (error instanceof Error) {
-      console.error(`❌ Error in autoCreateTicketFromThreat: ${error.message}`);
-    } else {
-      console.error(`❌ Error in autoCreateTicketFromThreat: ${String(error)}`);
-    }
+    // Xử lý lỗi nhưng không log ra console
   }
 }
 
 
+/**
+ * Cập nhật trạng thái ticket
+ * @param req - Express request
+ * @param res - Express response
+ */
 export async function updateState(req: Request, res: Response) {
   const { data } = req.body;
   const ticketId = req.params.id;
   const userId = req.user?._id
 
   try {
-    // Find the ticket first to check current status
+    // Tìm ticket trước để kiểm tra trạng thái hiện tại
     const currentTicket = await TicketModel.findById(ticketId).populate('assignee');
 
     if (!currentTicket) {
       return res.json(errorResponse("Ticket not found"));
     }
 
-    // Get the user making the request
+    // Lấy thông tin user thực hiện request
     const user = await UserModel.findOne({
       account: userId,
     });
@@ -236,7 +241,7 @@ export async function updateState(req: Request, res: Response) {
     
 
     if (currentTicket.status === "Not accepted" && data.status === "Processing") {
-      // Allow both project_manager and security_expert to change ticket to Processing state
+      // Cho phép cả project_manager và security_expert thay đổi ticket sang trạng thái Processing
       if (account.role !== "security_expert") {
         return res.json(errorResponse("Only security experts can change ticket to Processing state"));
       }
@@ -248,16 +253,16 @@ export async function updateState(req: Request, res: Response) {
       return res.json(errorResponse("Invalid status transition"));
     }
 
-    // Save the current status as previousStatus before updating
+    // Lưu trạng thái hiện tại làm previousStatus trước khi cập nhật
     const previousStatus = currentTicket.status;
 
-    // Update the ticket if permissions check passed
+    // Cập nhật ticket nếu kiểm tra quyền thành công
     const ticket = await TicketModel.findOneAndUpdate(
       { _id: ticketId },
       {
         $set: {
           status: data.status,
-          previousStatus: previousStatus // Store the previous status
+          previousStatus: previousStatus // Lưu trạng thái trước đó
         }
       },
       { new: true }
@@ -270,26 +275,25 @@ export async function updateState(req: Request, res: Response) {
     const artifact = await ArtifactModel.findById(ticket.artifactId);
 
     if (!artifact) {
-      console.log(`[DEBUG] Artifact ${ticket.artifactId} not found`);
       return;
     } 
 
-    // Handle post-update actions
+    // Xử lý các hành động sau khi cập nhật
     switch (ticket.status) {
       case "Processing":
-        // Find the assigned user first
+        // Tìm user được phân công trước
         const assignee = await UserModel.findById(ticket.assignee?._id);
         
-        // Update the assignee's ticketAssigned array
+        // Cập nhật mảng ticketAssigned của assignee
         if (assignee) {
           await UserModel.findByIdAndUpdate(assignee._id, {
-            $addToSet: { // Use addToSet to avoid duplicates
+            $addToSet: { // Sử dụng addToSet để tránh trùng lặp
               ticketAssigned: ticket._id
             },
           });
         }
         
-        // Update ticket with assigner info
+        // Cập nhật ticket với thông tin assigner
         await TicketModel.findOneAndUpdate(
           { _id: ticketId },
           {
@@ -299,15 +303,15 @@ export async function updateState(req: Request, res: Response) {
             }
           }
         );
-            // Update workflow status since a ticket has been submitted
+        
+        // Cập nhật trạng thái workflow vì ticket đã được gán
         try {
           await ArtifactWorkflowController.updateWorkflowStatus(artifact._id, 3);
         } catch (workflowError) {
-          console.error(`[ERROR] Failed to update workflow status:`, workflowError);
-          // Don't throw error here, as we don't want to block ticket update
+          // Không throw lỗi ở đây vì không muốn chặn việc cập nhật ticket
         }
         
-        // Create history entry with proper names
+        // Tạo entry lịch sử với tên đúng
         const assigneeName = assignee?.name || 'Unknown';
         
         await ChangeHistoryModel.create({
@@ -320,17 +324,16 @@ export async function updateState(req: Request, res: Response) {
         break;
 
       case "Submitted":
-        // Get assignee name from populated ticket
+        // Lấy tên assignee từ ticket đã populate
         const submitterName = (ticket.assignee && typeof ticket.assignee !== 'string' && 'name' in ticket.assignee ? ticket.assignee.name : user.name);
         
         handleTicketSubmitted(ticket._id.toString());
 
-            // Update workflow status since a ticket has been submitted
+        // Cập nhật trạng thái workflow vì ticket đã được submit
         try {
           await ArtifactWorkflowController.updateWorkflowStatus(artifact._id, 4);
         } catch (workflowError) {
-          console.error(`[ERROR] Failed to update workflow status:`, workflowError);
-          // Don't throw error here, as we don't want to block ticket update
+          // Không throw lỗi ở đây vì không muốn chặn việc cập nhật ticket
         }
         
         await ChangeHistoryModel.create({
@@ -343,58 +346,56 @@ export async function updateState(req: Request, res: Response) {
         break;
     }
 
-    console.log('✅ Update completed successfully');
     return res.json(successResponse(null, `Ticket status changed to: ${ticket.status} successfully`));
   } catch (error) {
-    console.error('❌ Error updating ticket state:', error);
     return res.json(errorResponse(`Internal server error: ${error}`));
   }
 }
 
 /**
- * Update the status of a ticket related to a threat.
- * If isDone = true: update ticket to "Resolved",
- * if false: update ticket to "Processing".
+ * Cập nhật trạng thái ticket liên quan đến một threat
+ * Nếu isDone = true: cập nhật ticket thành "Resolved"
+ * Nếu false: cập nhật ticket thành "Processing"
+ * @param threatId - ID của threat
+ * @param isDone - Trạng thái hoàn thành
  */
 export async function updateTicketStatusForThreat(threatId: any, isDone: boolean) {
-  // Find ticket linked to this threat
+  // Tìm ticket liên kết với threat này
   const ticket = await TicketModel.findOne({ targetedThreat: threatId }).populate({
     path: "assignee targetedThreat",
   });
   
   if (!ticket) {
-    console.warn(`No ticket found linked to threat ${threatId}`);
     return;
   }
 
   if (ticket.status === "Submitted") {
     const newStatus = isDone ? "Resolved" : "Processing";
-    console.log(`📝 Updating ticket ${ticket._id} status from ${ticket.status} to ${newStatus}`);
 
-    // Store current status as previous status before updating
+    // Lưu trạng thái hiện tại làm previousStatus trước khi cập nhật
     const previousStatus = ticket.status;
 
-    // Update ticket status
+    // Cập nhật trạng thái ticket
     const updatedTicket = await TicketModel.findByIdAndUpdate(
       ticket._id, 
       { $set: { 
           status: newStatus, 
-          previousStatus: previousStatus  // Set the previous status
+          previousStatus: previousStatus  // Đặt previousStatus
         } 
       },
       { new: true }
     );
 
     if (!updatedTicket) {
-      console.error(`❌ Failed to update ticket ${ticket._id}`);
       return;
     }
 
-    // Get the threat name for better history logs
+    // Lấy tên threat để ghi lịch sử tốt hơn
     const threatName = (ticket.targetedThreat && typeof ticket.targetedThreat !== 'string' && 'name' in ticket.targetedThreat)
       ? ticket.targetedThreat.name
       : "unknown threat";
-      // Record the change history with better descriptions
+      
+    // Ghi lại lịch sử thay đổi với mô tả tốt hơn
     let description = "";
     if (isDone) {
       description = `Verified success and resolved ticket`;
@@ -405,27 +406,26 @@ export async function updateTicketStatusForThreat(threatId: any, isDone: boolean
     await ChangeHistoryModel.create({
       objectId: ticket._id,
       action: "update",
-      timestamp: new Date(), // Use current time instead of ticket.updatedAt for accurate timestamps
+      timestamp: new Date(), // Sử dụng thời gian hiện tại thay vì ticket.updatedAt để có timestamp chính xác
       account: null,
       description: description
     });
-
-    // Log the successful status change
-    const statusChangeMessage = isDone 
-      ? `✅ Successfully resolved ticket ${ticket._id}`
-      : `🔄 Returned ticket ${ticket._id} to processing`;
-    console.log(statusChangeMessage);
   }
 }
 
+/**
+ * Đề xuất assignee từ loại threat
+ * @param projectId - ID của project
+ * @param threatType - Loại threat
+ * @returns User phù hợp hoặc null
+ */
 export async function suggestAssigneeFromThreatType(projectId: string, threatType: string) {
   try {
-
-    // Fetch all members in the project
+    // Lấy tất cả members trong project
     const members = await UserModel.find({ projectIn: projectId });
 
     for (const member of members) {
-      // Check if skills array exists and is an array before using includes()
+      // Kiểm tra xem mảng skills có tồn tại và là array trước khi sử dụng includes()
       if (!member.skills || !Array.isArray(member.skills)) {
         continue;
       }
@@ -436,11 +436,6 @@ export async function suggestAssigneeFromThreatType(projectId: string, threatTyp
     }
     return null;
   } catch (error) {
-    if (error instanceof Error) {
-      console.error(`❌ [suggestAssigneeFromThreatType] Error: ${error.message}`);
-    } else {
-      console.error(`❌ [suggestAssigneeFromThreatType] Error: ${String(error)}`);
-    }
     return null;
   }
 }
@@ -455,7 +450,7 @@ export async function suggestAssigneeFromThreatType(projectId: string, threatTyp
     const { id } = req.params;
     const { data } = req.body;
     try {
-      // Get the original ticket before updating
+      // Lấy ticket gốc trước khi cập nhật
       const originalTicket = await TicketModel.findById(id);
       
       if (!originalTicket) {
@@ -466,7 +461,7 @@ export async function suggestAssigneeFromThreatType(projectId: string, threatTyp
       const ticket = await TicketModel.findByIdAndUpdate(id, data, { new: true });
       
       if (ticket) {
-        // Build a simple change description with field names
+        // Xây dựng mô tả thay đổi đơn giản với tên trường
         const changedFields = [];
         
         if (data.title && data.title !== originalTicket.title) {
@@ -479,7 +474,7 @@ export async function suggestAssigneeFromThreatType(projectId: string, threatTyp
           changedFields.push("assignee");
         }
         
-        // Create a description with just the field names
+        // Tạo mô tả chỉ với tên trường
         const changeDescription = `${req.user?.username} updated ticket fields: ${changedFields.join(', ')}`;
 
         // Ghi lại lịch sử thay đổi
@@ -496,67 +491,58 @@ export async function suggestAssigneeFromThreatType(projectId: string, threatTyp
       
       return res.json(errorResponse("Failed to update ticket"));
     } catch (error) {
-      console.log(error);
       return res.json(errorResponse(`Internal server error: ${error}`));
     }
   }
 
+  /**
+   * Xử lý khi ticket được submit
+   * @param ticketId - ID của ticket
+   */
   async function handleTicketSubmitted(ticketId: string) {
     const ticket = await TicketModel.findById(ticketId).populate("artifactId targetedThreat");
 
     if (!ticket) {
-      console.log(`[DEBUG] Ticket ${ticketId} not found`);
       return;
     }
 
     const artifact = await ArtifactModel.findById(ticket.artifactId);
 
     if (!artifact) {
-      console.log(`[DEBUG] Artifact ${ticket.artifactId} not found`);
       return;
     } 
+    
     artifact.numberThreatSubmitted = (artifact.numberThreatSubmitted || 0) + 1;
     await artifact.save();
 
-    // Check tỷ lệ threat đã submit
+    // Kiểm tra tỷ lệ threat đã submit
     const totalThreat = artifact.threatList?.length || 0;
     const submittedRatio = totalThreat > 0 ? (artifact.numberThreatSubmitted || 0) / totalThreat * 100 : 0;
 
     const managerConfigThreshold = artifact.rateReScan || 50;
-  
 
     if (submittedRatio >= managerConfigThreshold && (artifact.totalScanners ?? 0) <= 0) {
-      console.log(`[INFO] Triggering rescan for artifact ${artifact._id}`);
-      
-      // Find the phase that contains this artifact
+      // Tìm phase chứa artifact này
       const phase = await PhaseModel.findOne({ artifacts: artifact._id });
       if (!phase) {
-        console.error(`[ERROR] Could not find phase containing artifact ${artifact._id}`);
         return;
       }
 
-      console.log(`[INFO] Found phase ${phase._id} for artifact ${artifact._id}`);
-
-      // Update totalScanners to prevent multiple scans
+      // Cập nhật totalScanners để ngăn quét nhiều lần
       await ArtifactModel.findByIdAndUpdate(artifact._id, { 
         $set: { totalScanners: 1 } 
       });
 
-      // Trigger quét lại artifact với phase ID thực
+      // Kích hoạt quét lại artifact với phase ID thật
       setImmediate(async () => {
         try {
-          console.log(`[INFO] Starting background scan for artifact ${artifact._id}`);
           await scanArtifact(artifact, phase._id.toString());
-          console.log(`[SUCCESS] Background scan completed for artifact ${artifact._id}`);
         } catch (error) {
-          console.error(`[ERROR] Scanning failed for artifact ${artifact._id}:`, error);
-          // Reset totalScanners on failure
+          // Reset totalScanners khi thất bại
           await ArtifactModel.findByIdAndUpdate(artifact._id, { 
             $set: { totalScanners: 0 } 
           });
         }
       });
-    } else {
-      console.log(`[INFO] Rescan not triggered - ratio: ${submittedRatio.toFixed(2)}%, threshold: ${managerConfigThreshold}%, scanners: ${artifact.totalScanners ?? 0}`);
     }
   }

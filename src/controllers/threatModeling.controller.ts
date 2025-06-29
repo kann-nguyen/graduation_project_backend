@@ -11,12 +11,11 @@ interface MitigationStrategy {
   implementation: string;
 }
 
-// Store loaded JSON data
-let cweMitigationsData: Record<string, MitigationStrategy>;
+// Lưu trữ dữ liệu JSON đã tải
 let cvssVectorMappingData: Record<string, any>;
 let securityInfoLinksData: Record<string, Record<string, string>>;
 
-// Separate mitigation data components
+// Các thành phần dữ liệu giảm thiểu riêng biệt
 let vulnerabilityCategoriesData: Record<string, MitigationStrategy>;
 let strideCategoriesData: Record<string, MitigationStrategy>;
 let complementaryMitigationsData: Record<string, MitigationStrategy>;
@@ -24,28 +23,24 @@ let cweMappingData: Record<string, string>;
 let patternMatchingData: Record<string, string[]>;
 
 /**
- * Load all JSON configuration files at startup
+ * Tải tất cả các file cấu hình JSON khi khởi động
  */
 async function loadJsonConfigs() {
   try {
-    // Define paths
+    // Định nghĩa đường dẫn
     const basePath = path.resolve(__dirname, '../utils');
     
-    cweMitigationsData = JSON.parse(
-      await fs.readFile(path.join(basePath, 'cweMitigations.json'), 'utf8')
-    );
-    
-    // Load the CVSS vector mapping file
+    // Tải file ánh xạ CVSS vector
     cvssVectorMappingData = JSON.parse(
       await fs.readFile(path.join(basePath, 'cvssVectorMapping.json'), 'utf8')
     );
     
-    // Load the security info links file
+    // Tải file liên kết thông tin bảo mật
     securityInfoLinksData = JSON.parse(
       await fs.readFile(path.join(basePath, 'securityInfoLinks.json'), 'utf8')
     );
     
-    // Load the separated mitigation files
+    // Tải các file giảm thiểu đã tách riêng
     vulnerabilityCategoriesData = JSON.parse(
       await fs.readFile(path.join(basePath, 'vulnerabilityCategories.json'), 'utf8')
     );
@@ -72,48 +67,48 @@ async function loadJsonConfigs() {
   }
 }
 
-// Initialize by loading all configurations
+// Khởi tạo bằng cách tải tất cả cấu hình
 loadJsonConfigs().catch(console.error);
 
 /**
- * Get detailed threat information for "More Info" button
+ * Lấy thông tin chi tiết về mối đe dọa cho nút "Thông tin thêm"
  * 
- * This endpoint provides technical details about a threat, including:
- * - CVSS score and severity
- * - CWE classifications
- * - Publication dates and references
- * - Detailed risk assessment
- * - Technical vulnerability details
+ * Endpoint này cung cấp chi tiết kỹ thuật về một mối đe dọa, bao gồm:
+ * - Điểm CVSS và mức độ nghiêm trọng
+ * - Phân loại CWE
+ * - Ngày xuất bản và tài liệu tham khảo
+ * - Đánh giá rủi ro chi tiết
+ * - Chi tiết kỹ thuật về lỗ hổng
  * 
- * @param {Request} req - Request from client containing threatId
- * @param {Response} res - Response with detailed threat information
- * @returns {Promise<Response>} - JSON response
+ * @param {Request} req - Yêu cầu từ client chứa threatId
+ * @param {Response} res - Phản hồi với thông tin chi tiết về mối đe dọa
+ * @returns {Promise<Response>} - Phản hồi JSON
  */
 export async function getDetailedThreatInfo(req: Request, res: Response) {
   const { id } = req.params;
   
   try {
-    // Get the threat and related vulnerability data
+    // Lấy mối đe dọa và dữ liệu lỗ hổng liên quan
     const threat = await ThreatModel.findById(id);
     
     if (!threat) {
       return res.json(errorResponse("Threat not found"));
     }
     
-    // Find any artifact containing this threat to get the vulnerability data
+    // Tìm artifact nào đó chứa mối đe dọa này để lấy dữ liệu lỗ hổng
     const artifact = await ArtifactModel.findOne({
       threatList: id,
     });
     
-    // Find the corresponding vulnerability based on threat.name (which is the CVE ID)
+    // Tìm lỗ hổng tương ứng dựa trên threat.name (là CVE ID)
     const relatedVulnerability = artifact?.vulnerabilityList?.find(
       (vuln) => vuln.cveId === threat.name
     );
     
-    // Get additional threat context based on STRIDE category
+    // Lấy ngữ cảnh mối đe dọa bổ sung dựa trên loại STRIDE
     const threatContext = getEnhancedThreatContext(threat.type, relatedVulnerability);
     
-    // Risk assessment details
+    // Chi tiết đánh giá rủi ro
     const riskAssessment = {
       affectedAssets: getAffectedAssets(threat.type),
       potentialImpacts: getPotentialImpacts(threat.type),
@@ -139,15 +134,15 @@ export async function getDetailedThreatInfo(req: Request, res: Response) {
 
 
 /**
- * Get enhanced threat context with official links for the informational elements
+ * Lấy ngữ cảnh mối đe dọa nâng cao với liên kết chính thức cho các yếu tố thông tin
  * 
- * @param {string} threatType - The STRIDE category of the threat
- * @param {any} vulnerability - The related vulnerability data if available
- * @returns {Object} - Enhanced context information with official links
+ * @param {string} threatType - Loại STRIDE của mối đe dọa
+ * @param {any} vulnerability - Dữ liệu lỗ hổng liên quan nếu có
+ * @returns {Object} - Thông tin ngữ cảnh nâng cao với liên kết chính thức
  */
 function getEnhancedThreatContext(threatType: string, vulnerability: any = null) {
 
-  // Create a deep copy to avoid modifying the original
+  // Tạo bản sao sâu để tránh sửa đổi bản gốc
   const enrichedContext: {
     description: string;
     commonAttackVectors: string[];
@@ -157,12 +152,12 @@ function getEnhancedThreatContext(threatType: string, vulnerability: any = null)
     commonAttackVectors: [],
     securityPrinciples: []
   };
-    // Adjust context based on CVSS vector if available
+    // Điều chỉnh ngữ cảnh dựa trên CVSS vector nếu có
   if (vulnerability && vulnerability.cvssVector) {
     const vectorAdjustments = getAdjustmentsFromCVSSVector(vulnerability.cvssVector, threatType);
     
     if (vectorAdjustments.attackVectors.length > 0) {
-      // Prioritize these vectors
+      // Ưu tiên những vector này
       enrichedContext.commonAttackVectors = [
         ...vectorAdjustments.attackVectors,
         ...enrichedContext.commonAttackVectors.filter(vector => 
@@ -174,7 +169,7 @@ function getEnhancedThreatContext(threatType: string, vulnerability: any = null)
     }
     
     if (vectorAdjustments.securityPrinciples.length > 0) {
-      // Prioritize these principles
+      // Ưu tiên những nguyên tắc này
       enrichedContext.securityPrinciples = [
         ...vectorAdjustments.securityPrinciples,
         ...enrichedContext.securityPrinciples.filter(principle => 
@@ -186,16 +181,73 @@ function getEnhancedThreatContext(threatType: string, vulnerability: any = null)
     }
   }
   
-  // Add official links to the context
+  // Thêm liên kết chính thức vào ngữ cảnh
   return enrichContextWithLinks(enrichedContext);
 }
 
 /**
- * Extract attack vectors and security principles from CVSS vector string
+ * Làm phong phú thông tin ngữ cảnh với các liên kết chính thức
  * 
- * @param {string} cvssVector - CVSS vector string
- * @param {string} threatType - STRIDE threat type
- * @returns {Object} - Object with attack vectors and security principles
+ * @param {Object} context - Thông tin ngữ cảnh cơ bản
+ * @returns {Object} - Ngữ cảnh được làm phong phú với các liên kết chính thức
+ */
+function enrichContextWithLinks(context: any): any {
+  // Tạo bản sao sâu của ngữ cảnh
+  const enrichedContext = {
+    description: context.description,
+    commonAttackVectors: [],
+    securityPrinciples: []
+  };
+  
+  // Thêm thông tin liên kết vào các vector tấn công
+  enrichedContext.commonAttackVectors = context.commonAttackVectors.map((vector: string) => {
+    // Cố gắng tìm khớp chính xác hoặc khớp một phần trong dữ liệu liên kết
+    for (const [key, url] of Object.entries(securityInfoLinksData.attackVectors)) {
+      if (vector.toLowerCase().includes(key.toLowerCase()) || 
+          key.toLowerCase().includes(vector.toLowerCase())) {
+        return {
+          text: vector,
+          link: url
+        };
+      }
+    }
+    
+    // Nếu không tìm thấy khớp nào, trả về với liên kết dự phòng
+    return {
+      text: vector,
+      link: `${securityInfoLinksData.fallbackLink}?query=${encodeURIComponent(vector)}`
+    };
+  });
+  
+  // Thêm thông tin liên kết vào các nguyên tắc bảo mật
+  enrichedContext.securityPrinciples = context.securityPrinciples.map((principle: string) => {
+    // Cố gắng tìm khớp chính xác hoặc khớp một phần trong dữ liệu liên kết
+    for (const [key, url] of Object.entries(securityInfoLinksData.securityPrinciples)) {
+      if (principle.toLowerCase().includes(key.toLowerCase()) || 
+          key.toLowerCase().includes(principle.toLowerCase())) {
+        return {
+          text: principle,
+          link: url
+        };
+      }
+    }
+    
+    // Nếu không tìm thấy khớp nào, trả về với liên kết chung
+    return {
+      text: principle,
+      link: `https://cheatsheetseries.owasp.org/cheatsheets/Secure_Coding_Practices-Quick_Reference_Guide.html`
+    };
+  });
+  
+  return enrichedContext;
+}
+
+/**
+ * Trích xuất các vector tấn công và nguyên tắc bảo mật từ chuỗi CVSS vector
+ * 
+ * @param {string} cvssVector - Chuỗi CVSS vector
+ * @param {string} threatType - Loại mối đe dọa STRIDE
+ * @returns {Object} - Đối tượng với các vector tấn công và nguyên tắc bảo mật
  */
 function getAdjustmentsFromCVSSVector(cvssVector: string, threatType: string): {
   attackVectors: string[],
@@ -203,35 +255,35 @@ function getAdjustmentsFromCVSSVector(cvssVector: string, threatType: string): {
   const attackVectors: string[] = [];
   const securityPrinciples: string[] = [];
   
-  // Check if our data is loaded
+  // Kiểm tra xem dữ liệu của chúng ta đã được tải chưa
   if (!cvssVectorMappingData) {
     console.error("CVSS vector mapping data not loaded");
     return { attackVectors, securityPrinciples };
   }
   
-  // Parse CVSS vector components
+  // Phân tích các thành phần CVSS vector
   const cvssComponents = cvssVector.split('/');
   
-  // Extract individual vector elements (AV:N, AC:L, etc.)
+  // Trích xuất các phần tử vector riêng lẻ (AV:N, AC:L, v.v.)
   cvssComponents.forEach(component => {
     const trimmedComponent = component.trim();
     
-    // Look up attack vectors from our JSON data
+    // Tìm kiếm các vector tấn công từ dữ liệu JSON của chúng ta
     if (cvssVectorMappingData.attackVectors[trimmedComponent]) {
       attackVectors.push(cvssVectorMappingData.attackVectors[trimmedComponent].vector);
     }
     
-    // Look up security principles from our JSON data
+    // Tìm kiếm các nguyên tắc bảo mật từ dữ liệu JSON của chúng ta
     if (cvssVectorMappingData.securityPrinciples[trimmedComponent]) {
       securityPrinciples.push(cvssVectorMappingData.securityPrinciples[trimmedComponent]);
     }
   });
   
-  // Add threat-specific principles if the relevant CVSS components are present
+  // Thêm các nguyên tắc cụ thể cho mối đe dọa nếu có các thành phần CVSS liên quan
   if (cvssVectorMappingData.threatSpecificPrinciples[threatType]) {
     const threatSpecific = cvssVectorMappingData.threatSpecificPrinciples[threatType];
     
-    // Check if any of the conditions for this threat type are present in the CVSS vector
+    // Kiểm tra xem có điều kiện nào cho loại mối đe dọa này có trong CVSS vector không
     const hasRelevantCondition = threatSpecific.conditions.some((condition: string) => 
       cvssComponents.some(component => component.trim() === condition)
     );
@@ -247,68 +299,12 @@ function getAdjustmentsFromCVSSVector(cvssVector: string, threatType: string): {
   };
 }
 
-/**
- * Enrich context information with official links
- * 
- * @param {Object} context - The base context information
- * @returns {Object} - Context enriched with official links
- */
-function enrichContextWithLinks(context: any): any {
-  // Create a deep copy of the context
-  const enrichedContext = {
-    description: context.description,
-    commonAttackVectors: [],
-    securityPrinciples: []
-  };
-  
-  // Add link information to attack vectors
-  enrichedContext.commonAttackVectors = context.commonAttackVectors.map((vector: string) => {
-    // Try to find exact matches or partial matches in the links data
-    for (const [key, url] of Object.entries(securityInfoLinksData.attackVectors)) {
-      if (vector.toLowerCase().includes(key.toLowerCase()) || 
-          key.toLowerCase().includes(vector.toLowerCase())) {
-        return {
-          text: vector,
-          link: url
-        };
-      }
-    }
-    
-    // If no match is found, return with the fallback link
-    return {
-      text: vector,
-      link: `${securityInfoLinksData.fallbackLink}?query=${encodeURIComponent(vector)}`
-    };
-  });
-  
-  // Add link information to security principles
-  enrichedContext.securityPrinciples = context.securityPrinciples.map((principle: string) => {
-    // Try to find exact matches or partial matches in the links data
-    for (const [key, url] of Object.entries(securityInfoLinksData.securityPrinciples)) {
-      if (principle.toLowerCase().includes(key.toLowerCase()) || 
-          key.toLowerCase().includes(principle.toLowerCase())) {
-        return {
-          text: principle,
-          link: url
-        };
-      }
-    }
-    
-    // If no match is found, return with a general link
-    return {
-      text: principle,
-      link: `https://cheatsheetseries.owasp.org/cheatsheets/Secure_Coding_Practices-Quick_Reference_Guide.html`
-    };
-  });
-  
-  return enrichedContext;
-}
 
 /**
- * Get potentially affected assets based on threat type
+ * Lấy các tài sản có thể bị ảnh hưởng dựa trên loại mối đe dọa
  * 
- * @param {string} threatType - The STRIDE category of the threat
- * @returns {string[]} - Array of potentially affected assets
+ * @param {string} threatType - Loại STRIDE của mối đe dọa
+ * @returns {string[]} - Mảng các tài sản có thể bị ảnh hưởng
  */
 function getAffectedAssets(threatType: string): string[] {
   const assetsByThreatType: Record<string, string[]> = {
@@ -324,10 +320,10 @@ function getAffectedAssets(threatType: string): string[] {
 }
 
 /**
- * Get potential impacts based on threat type
+ * Lấy các tác động tiềm ẩn dựa trên loại mối đe dọa
  * 
- * @param {string} threatType - The STRIDE category of the threat
- * @returns {string[]} - Array of potential impacts
+ * @param {string} threatType - Loại STRIDE của mối đe dọa
+ * @returns {string[]} - Mảng các tác động tiềm ẩn
  */
 function getPotentialImpacts(threatType: string): string[] {
   const impactsByThreatType: Record<string, string[]> = {
@@ -343,46 +339,46 @@ function getPotentialImpacts(threatType: string): string[] {
 }
 
 /**
- * Get mitigation suggestions for "Suggest Fix" button
+ * Lấy gợi ý giảm thiểu cho nút "Đề xuất sửa chữa"
  * 
- * This endpoint provides actionable recommendations for fixing a threat:
- * - General and specific mitigation strategies
- * - Security best practices
- * - Implementation examples with code snippets
- * - Recommended security tools
+ * Endpoint này cung cấp các khuyến nghị khả thi để khắc phục mối đe dọa:
+ * - Chiến lược giảm thiểu chung và cụ thể
+ * - Thực hành tốt nhất về bảo mật
+ * - Ví dụ triển khai với đoạn mã
+ * - Công cụ bảo mật được khuyến nghị
  * 
- * @param {Request} req - Request from client containing threatId
- * @param {Response} res - Response with suggested fixes and mitigations
- * @returns {Promise<Response>} - JSON response
+ * @param {Request} req - Yêu cầu từ client chứa threatId
+ * @param {Response} res - Phản hồi với các bản sửa và giảm thiểu được đề xuất
+ * @returns {Promise<Response>} - Phản hồi JSON
  */
 export async function getSuggestedFixes(req: Request, res: Response) {
   const { id } = req.params;
   
   try {
-// Validate ID
+// Xác thực ID
     if (!mongoose.Types.ObjectId.isValid(id)) {
       return res.json(errorResponse("Invalid threat ID format"));
     }
 
-    // Get the threat and populate its mitigations
+    // Lấy mối đe dọa và populate các giảm thiểu của nó
     const threat = await ThreatModel.findById(id).populate('mitigations');
     
     if (!threat) {
       return res.json(errorResponse("Threat not found"));
     }
     
-    // Find any artifact containing this threat to get the vulnerability data
+    // Tìm artifact nào đó chứa mối đe dọa này để lấy dữ liệu lỗ hổng
     const artifact = await ArtifactModel.findOne({
       threatList: id,
     });
     
-    // Find the corresponding vulnerability based on threat.name (which is the CVE ID)
+    // Tìm lỗ hổng tương ứng dựa trên threat.name (là CVE ID)
     const relatedVulnerability = artifact?.vulnerabilityList?.find(
       (vuln) => vuln.cveId === threat.name
     );
   
     
-// Check if the threat already has structured mitigations
+// Kiểm tra xem mối đe dọa đã có các giảm thiểu có cấu trúc chưa
     const existingMitigations = threat.mitigations?.length ? 
       threat.mitigations.map((m: any) => ({
         _id: m._id,
@@ -392,7 +388,7 @@ export async function getSuggestedFixes(req: Request, res: Response) {
         isImplemented: m.isImplemented
       })) : [];
 
-    // Generate new mitigation suggestions based on threat type
+    // Tạo gợi ý giảm thiểu mới dựa trên loại mối đe dọa
     const mitigationSuggestions = getMitigationSuggestions(
       threat.type,
       relatedVulnerability
@@ -415,52 +411,52 @@ export async function getSuggestedFixes(req: Request, res: Response) {
 }
 
 /**
- * Get mitigation suggestions based on threat type and vulnerability data
+ * Lấy gợi ý giảm thiểu dựa trên loại mối đe dọa và dữ liệu lỗ hổng
  * 
- * @param {string} threatType - The STRIDE category of the threat
- * @param {any} vulnerability - Related vulnerability data if available
- * @returns {Object} - Object containing specific mitigations
+ * @param {string} threatType - Loại STRIDE của mối đe dọa
+ * @param {any} vulnerability - Dữ liệu lỗ hổng liên quan nếu có
+ * @returns {Object} - Đối tượng chứa các giảm thiểu cụ thể
  */
 function getMitigationSuggestions(threatType: string, vulnerability: any) {
-  // Collect all information to inform our mitigation strategy
+  // Thu thập tất cả thông tin để thông báo cho chiến lược giảm thiểu của chúng ta
   const cwes = vulnerability?.cwes || [];
   const cvssVector = vulnerability?.cvssVector || "";
   const description = vulnerability?.description || "";
   const severity = vulnerability?.severity || "";
   
-  // Create a comprehensive context analysis from all available information
+  // Tạo phân tích ngữ cảnh toàn diện từ tất cả thông tin có sẵn
   const context = analyzeVulnerabilityContext(threatType, cwes, cvssVector, description, severity);
   
-  // Generate 1-2 focused mitigations based on the comprehensive analysis
+  // Tạo 1-2 giảm thiểu tập trung dựa trên phân tích toàn diện
   const mitigations = [];
   
-  // 1. Generate primary mitigation based on context
+  // 1. Tạo giảm thiểu chính dựa trên ngữ cảnh
   const primaryMitigation = generatePrimaryMitigation(context);
   if (primaryMitigation) {
     mitigations.push(primaryMitigation);
   }
   
-  // 2. Optionally generate a complementary mitigation if relevant
+  // 2. Tùy chọn tạo giảm thiểu bổ sung nếu liên quan
   const secondaryMitigation = generateComplementaryMitigation(context, primaryMitigation?.title || "");
   if (secondaryMitigation) {
     mitigations.push(secondaryMitigation);
   }
   
-  // Return the focused mitigations
+  // Trả về các giảm thiểu tập trung
   return {
     specific: mitigations
   };
 }
 
 /**
- * Analyze vulnerability to create a comprehensive context for mitigation generation
+ * Phân tích lỗ hổng để tạo ngữ cảnh toàn diện cho việc tạo giảm thiểu
  * 
- * @param {string} threatType - STRIDE category
- * @param {string[]} cwes - CWE identifiers
- * @param {string} cvssVector - CVSS vector string
- * @param {string} description - Vulnerability description
- * @param {string} severity - Vulnerability severity
- * @returns {Object} - Comprehensive context analysis
+ * @param {string} threatType - Loại STRIDE
+ * @param {string[]} cwes - Các định danh CWE
+ * @param {string} cvssVector - Chuỗi CVSS vector
+ * @param {string} description - Mô tả lỗ hổng
+ * @param {string} severity - Mức độ nghiêm trọng của lỗ hổng
+ * @returns {Object} - Phân tích ngữ cảnh toàn diện
  */
 function analyzeVulnerabilityContext(
   threatType: string,
@@ -469,40 +465,40 @@ function analyzeVulnerabilityContext(
   description: string,
   severity: string
 ): any {
-  // Identify key vulnerability characteristics
+  // Xác định các đặc điểm chính của lỗ hổng
   const descriptionLower = description.toLowerCase();
   
-  // 1. Attack vector characteristics
+  // 1. Đặc điểm vector tấn công
   const isNetworkBased = cvssVector.includes('AV:N');
   const isLocalAttack = cvssVector.includes('AV:L');
   const isAdjacentAttack = cvssVector.includes('AV:A');
   const isPhysicalAttack = cvssVector.includes('AV:P');
   
-  // 2. Attack complexity
+  // 2. Độ phức tạp tấn công
   const isLowComplexity = cvssVector.includes('AC:L');
   const isHighComplexity = cvssVector.includes('AC:H');
   
-  // 3. Authentication/privileges required
+  // 3. Xác thực/quyền hạn cần thiết
   const noPrivRequired = cvssVector.includes('PR:N');
   const lowPrivRequired = cvssVector.includes('PR:L');
   const highPrivRequired = cvssVector.includes('PR:H');
   
-  // 4. User interaction
+  // 4. Tương tác người dùng
   const userInteractionRequired = cvssVector.includes('UI:R');
   const noUserInteraction = cvssVector.includes('UI:N');
   
-  // 5. Impact characteristics
+  // 5. Đặc điểm tác động
   const highConfidentiality = cvssVector.includes('C:H');
   const highIntegrity = cvssVector.includes('I:H');
   const highAvailability = cvssVector.includes('A:H');
   const scopeChanged = cvssVector.includes('S:C');
   
-  // 6. Map CWEs to vulnerability categories
+  // 6. Ánh xạ CWE vào các loại lỗ hổng
   const vulnCategories = new Set<string>();
   
-  // Check if mitigationTemplatesData is loaded
+  // Kiểm tra xem mitigationTemplatesData đã được tải chưa
   if (vulnerabilityCategoriesData && cweMappingData && patternMatchingData) {
-    // Map known CWEs to vulnerability categories using our mapping
+    // Ánh xạ CWE đã biết vào các loại lỗ hổng bằng ánh xạ của chúng ta
     cwes.forEach(cwe => {
       const cweNum = cwe.replace('CWE-', '');
       if (cweMappingData[cweNum]) {
@@ -510,10 +506,10 @@ function analyzeVulnerabilityContext(
       }
     });
     
-    // 7. Analyze description for additional context using patterns from JSON
+    // 7. Phân tích mô tả cho ngữ cảnh bổ sung bằng các mẫu từ JSON
     if (description) {
       for (const [category, patterns] of Object.entries(patternMatchingData)) {
-        // Check if any pattern appears in the description
+        // Kiểm tra xem có mẫu nào xuất hiện trong mô tả không
         const hasPattern = (patterns as string[]).some(pattern => 
           descriptionLower.includes(pattern.toLowerCase())
         );
@@ -525,12 +521,12 @@ function analyzeVulnerabilityContext(
     }
   }
   
-  // 8. Determine the primary vulnerability category based on combined analysis
+  // 8. Xác định loại lỗ hổng chính dựa trên phân tích kết hợp
   let primaryVulnCategory = '';
   
-  // Use the most specific vulnerability category we've identified
+  // Sử dụng loại lỗ hổng cụ thể nhất mà chúng ta đã xác định
   if (vulnCategories.size > 0) {
-    // Some categories are more critical than others
+    // Một số loại quan trọng hơn những loại khác
     const categoryPriority = [
       'sql-injection', 'command-injection', 'xss', 'xxe', 'deserialization', 
       'path-traversal', 'ssrf', 'csrf', 'authentication', 'authorization',
@@ -545,7 +541,7 @@ function analyzeVulnerabilityContext(
     }
   }
   
-  // 9. Analyze threat-specific factors
+  // 9. Phân tích các yếu tố cụ thể của mối đe dọa
   const isAuthenticationIssue = threatType === 'Spoofing' || vulnCategories.has('authentication');
   const isAuthorizationIssue = threatType === 'Elevation of Privilege' || vulnCategories.has('authorization');
   const isDataIntegrityIssue = threatType === 'Tampering' || highIntegrity;
@@ -553,13 +549,13 @@ function analyzeVulnerabilityContext(
   const isAvailabilityIssue = threatType === 'Denial of Service' || highAvailability;
   const isAuditingIssue = threatType === 'Repudiation';
   
-  // 10. Determine criticality
+  // 10. Xác định mức độ quan trọng
   const isCritical = 
-    (isNetworkBased && isLowComplexity && noPrivRequired) || // Easily exploitable remotely
+    (isNetworkBased && isLowComplexity && noPrivRequired) || // Dễ khai thác từ xa
     severity.toUpperCase() === 'CRITICAL' || 
-    (highConfidentiality && highIntegrity && highAvailability); // High impact across CIA triad
+    (highConfidentiality && highIntegrity && highAvailability); // Tác động cao trên tất cả CIA triad
   
-  // Return comprehensive context
+  // Trả về ngữ cảnh toàn diện
   return {
     threatType,
     cwes,
@@ -587,32 +583,32 @@ function analyzeVulnerabilityContext(
 }
 
 /**
- * Generate the primary mitigation strategy based on comprehensive context
+ * Tạo chiến lược giảm thiểu chính dựa trên ngữ cảnh toàn diện
  * 
- * @param {Object} context - Comprehensive vulnerability context
- * @returns {MitigationStrategy|null} - Primary mitigation strategy or null
+ * @param {Object} context - Ngữ cảnh lỗ hổng toàn diện
+ * @returns {MitigationStrategy|null} - Chiến lược giảm thiểu chính hoặc null
  */
 function generatePrimaryMitigation(context: any): MitigationStrategy | null {
-  // Check if we have mitigation templates loaded
+  // Kiểm tra xem chúng ta có các mẫu giảm thiểu đã tải chưa
   if (!vulnerabilityCategoriesData) {
     console.error("Mitigation templates not loaded");
     return null;
   }
   
-  // 1. Try to find a specific vulnerability category mitigation
+  // 1. Cố gắng tìm giảm thiểu loại lỗ hổng cụ thể
   if (context.primaryVulnCategory && 
       vulnerabilityCategoriesData[context.primaryVulnCategory]) {
     
-    // Get the mitigation strategy from our templates
+    // Lấy chiến lược giảm thiểu từ các mẫu của chúng ta
     const mitigation = vulnerabilityCategoriesData[context.primaryVulnCategory];
     
-    // Add context-specific modifications
+    // Thêm các sửa đổi cụ thể theo ngữ cảnh
     let description = mitigation.description;
     if (context.isCritical) {
       description = `Critical: ${description}`;
     }
     
-    // Add context-specific implementation details if needed
+    // Thêm chi tiết triển khai cụ thể theo ngữ cảnh nếu cần
     let implementation = mitigation.implementation;
     if (context.isNetworkBased && context.primaryVulnCategory === 'authentication') {
       implementation = `Implement multi-factor authentication. ${implementation}`;
@@ -625,119 +621,19 @@ function generatePrimaryMitigation(context: any): MitigationStrategy | null {
     };
   }
   
-  // 2. If no specific vulnerability category was identified, try using CWE-specific mitigations
-  if (context.cwes.length > 0) {
-    for (const cwe of context.cwes) {
-      const cweNumber = cwe.replace("CWE-", "");
-      
-      // Check if we have this CWE mapped to a vulnerability category
-      if (cweMappingData[cweNumber]) {
-        const vulnCategory = cweMappingData[cweNumber];
-        const mitigation = vulnerabilityCategoriesData[vulnCategory];
-        
-        if (mitigation) {
-          // Add context-specific details
-          let implementation = mitigation.implementation;
-          
-          if (context.isNetworkBased) {
-            implementation += " Since this is remotely exploitable, implement network-level protections as well.";
-          }
-          
-          // Add threat-specific context
-          if (context.isAuthenticationIssue) {
-            implementation += " Verify identity thoroughly and implement strong authentication.";
-          } else if (context.isAuthorizationIssue) {
-            implementation += " Verify authorization for all sensitive operations.";
-          } else if (context.isDataIntegrityIssue) {
-            implementation += " Validate data integrity and implement cryptographic controls.";
-          } else if (context.isConfidentialityIssue) {
-            implementation += " Ensure sensitive data is properly classified and encrypted.";
-          } else if (context.isAvailabilityIssue) {
-            implementation += " Implement proper resource constraints and error handling.";
-          } else if (context.isAuditingIssue) {
-            implementation += " Ensure actions are properly logged and auditable.";
-          }
-          
-          return {
-            title: mitigation.title,
-            description: `${context.isCritical ? 'Critical: ' : ''}${mitigation.description}`,
-            implementation: implementation
-          };
-        }
-      }
-      
-      // Fallback to using the CWE-specific mitigations from the cweMitigations.json file
-      const key = `CWE-${cweNumber}`;
-      const cweMitigation = cweMitigationsData[key];
-      
-      if (cweMitigation) {
-        // Create a more detailed implementation based on threat type and context
-        let implementation = cweMitigation.implementation;
-        
-        // Add context-specific details
-        if (context.isNetworkBased) {
-          implementation += " Since this is remotely exploitable, implement network-level protections as well.";
-        }
-        
-        // Add threat-specific context
-        if (context.isAuthenticationIssue) {
-          implementation += " Verify identity thoroughly and implement strong authentication.";
-        } else if (context.isAuthorizationIssue) {
-          implementation += " Verify authorization for all sensitive operations.";
-        } else if (context.isDataIntegrityIssue) {
-          implementation += " Validate data integrity and implement cryptographic controls.";
-        } else if (context.isConfidentialityIssue) {
-          implementation += " Ensure sensitive data is properly classified and encrypted.";
-        } else if (context.isAvailabilityIssue) {
-          implementation += " Implement proper resource constraints and error handling.";
-        } else if (context.isAuditingIssue) {
-          implementation += " Ensure actions are properly logged and auditable.";
-        }
-        
-        return {
-          title: cweMitigation.title,
-          description: `${context.isCritical ? 'Critical: ' : ''}${cweMitigation.description}`,
-          implementation: implementation
-        };
-      }
-    }
-  }
-  
-  // 3. Try to determine from description patterns
-  if (context.description) {
-    const descLower = context.description.toLowerCase();
-    
-    for (const [category, patterns] of Object.entries(patternMatchingData)) {
-      // Check if any pattern appears in the description
-      const hasPattern = (patterns as string[]).some(pattern => 
-        descLower.includes(pattern.toLowerCase())
-      );
-      
-      if (hasPattern && vulnerabilityCategoriesData[category]) {
-        const mitigation = vulnerabilityCategoriesData[category];
-        
-        return {
-          title: mitigation.title,
-          description: `${context.isCritical ? 'Critical: ' : ''}${mitigation.description}`,
-          implementation: mitigation.implementation
-        };
-      }
-    }
-  }
-  
-  // 4. Fall back to STRIDE-based general mitigation if nothing more specific was found
+  // 2. Fall back to STRIDE-based general mitigation if nothing more specific was found
   return getGeneralMitigation(context.threatType);
 }
 
 /**
- * Generate a complementary mitigation that addresses a different aspect
+ * Tạo giảm thiểu bổ sung giải quyết một khía cạnh khác
  * 
- * @param {Object} context - Comprehensive vulnerability context
- * @param {string} primaryTitle - Title of the primary mitigation to avoid duplication
- * @returns {MitigationStrategy|null} - Complementary mitigation or null
+ * @param {Object} context - Ngữ cảnh lỗ hổng toàn diện
+ * @param {string} primaryTitle - Tiêu đề của giảm thiểu chính để tránh trùng lặp
+ * @returns {MitigationStrategy|null} - Giảm thiểu bổ sung hoặc null
  */
 function generateComplementaryMitigation(context: any, primaryTitle: string): MitigationStrategy | null {
-  // Check if we have mitigation templates loaded
+  // Kiểm tra xem chúng ta có các mẫu giảm thiểu đã tải chưa
   if (!complementaryMitigationsData) {
     console.error("Mitigation templates not loaded");
     return null;
@@ -745,53 +641,53 @@ function generateComplementaryMitigation(context: any, primaryTitle: string): Mi
   
   const descLower = context.description.toLowerCase();
   
-  // Based on combined context, identify different aspects that should be addressed
+  // Dựa trên ngữ cảnh kết hợp, xác định các khía cạnh khác nhau cần được giải quyết
   
-  // If primary focused on prevention, add detection/monitoring
+  // Nếu chính tập trung vào phòng ngừa, thêm phát hiện/giám sát
   if (!primaryTitle.includes("Monitor") && !primaryTitle.includes("Detect") && context.isNetworkBased) {
     return complementaryMitigationsData.securityMonitoring;
   }
   
-  // If dealing with authentication but primary didn't address password issues specifically
+  // Nếu xử lý xác thực nhưng chính không giải quyết vấn đề mật khẩu cụ thể
   if (context.isAuthenticationIssue && !primaryTitle.includes("Password") && 
      (descLower.includes("password") || descLower.includes("credential"))) {
     return complementaryMitigationsData.passwordSecurity;
   }
   
-  // If dealing with sensitive data but primary didn't address minimization
+  // Nếu xử lý dữ liệu nhạy cảm nhưng chính không giải quyết tối thiểu hóa
   if (context.isConfidentialityIssue && !primaryTitle.includes("Minimization") && 
      (descLower.includes("sensitive") || descLower.includes("personal") || descLower.includes("private"))) {
     return complementaryMitigationsData.dataMinimization;
   }
   
-  // If dealing with APIs but primary didn't address API security specifically
+  // Nếu xử lý API nhưng chính không giải quyết bảo mật API cụ thể
   if (!primaryTitle.includes("API") && 
      (descLower.includes("api") || descLower.includes("endpoint") || descLower.includes("interface"))) {
     return complementaryMitigationsData.apiSecurity;
   }
   
-  // If dealing with DoS and memory issues but primary didn't address memory specifically
+  // Nếu xử lý DoS và vấn đề bộ nhớ nhưng chính không giải quyết bộ nhớ cụ thể
   if (context.isAvailabilityIssue && !primaryTitle.includes("Memory") && descLower.includes("memory")) {
     return complementaryMitigationsData.memoryProtection;
   }
   
-  // Add redundancy for critical availability issues
+  // Thêm dự phòng cho các vấn đề availability quan trọng
   if (context.isAvailabilityIssue && context.isCritical && !primaryTitle.includes("Redundancy")) {
     return complementaryMitigationsData.systemRedundancy;
   }
   
-  // If we didn't find a specific complementary mitigation, return null
+  // Nếu chúng ta không tìm thấy giảm thiểu bổ sung cụ thể, trả về null
   return null;
 }
 
 /**
- * Get a general mitigation based on STRIDE category
+ * Lấy giảm thiểu chung dựa trên loại STRIDE
  * 
- * @param {string} threatType - STRIDE category
- * @returns {MitigationStrategy} - General STRIDE-based mitigation
+ * @param {string} threatType - Loại STRIDE
+ * @returns {MitigationStrategy} - Giảm thiểu chung dựa trên STRIDE
  */
 function getGeneralMitigation(threatType: string): MitigationStrategy {
-  // Check if we have mitigation templates loaded
+  // Kiểm tra xem chúng ta có các mẫu giảm thiểu đã tải chưa
   if (!strideCategoriesData) {
     console.error("Mitigation templates or STRIDE categories not loaded");
     return {

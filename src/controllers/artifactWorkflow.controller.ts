@@ -4,28 +4,34 @@ import { Artifact } from '../models/artifact';
 import mongoose from 'mongoose';
 import { Ticket } from '../models/ticket';
 
-export class ArtifactWorkflowController {      public static async getWorkflowHistory(req: Request, res: Response) {
+/**
+ * Controller xử lý workflow của artifact (Quy trình làm việc với artifact)
+ * Quản lý các chu kỳ workflow: Detection -> Classification -> Assignment -> Remediation -> Verification
+ */
+export class ArtifactWorkflowController {
+  
+  /**
+   * Lấy lịch sử workflow của một artifact
+   * @param req - Express request với artifactId trong params
+   * @param res - Express response
+   */
+  public static async getWorkflowHistory(req: Request, res: Response) {
     try {
       const { artifactId } = req.params;
-      console.log(`[INFO] Fetching workflow history for artifact: ${artifactId}`);
       
-      // Get the workflow history
+      // Lấy lịch sử workflow
       const history = await ArtifactWorkflowController._getWorkflowHistory(artifactId);
-      console.log(`[DEBUG] Found ${history.length} workflow cycles`);
       
-      // Check if we found any history
+      // Kiểm tra nếu chưa có lịch sử
       if (history.length === 0) {
-        // If no history exists yet, check if we need to initialize a cycle
-        console.log(`[INFO] No workflow history found - checking if artifact exists`);
+        // Nếu chưa có lịch sử, kiểm tra xem artifact có tồn tại không
         const artifact = await ArtifactModel.findById(artifactId);
         if (artifact) {
           if (!artifact.currentWorkflowCycle) {
-            console.log(`[INFO] No current workflow cycle - initializing`);
-            // Initialize workflow if needed - this will create the first cycle
+            // Khởi tạo workflow nếu cần thiết - sẽ tạo chu kỳ đầu tiên
             await ArtifactWorkflowController._initializeWorkflowCycle(artifactId);
-            // Get the updated history
+            // Lấy lịch sử đã được cập nhật
             const updatedHistory = await ArtifactWorkflowController._getWorkflowHistory(artifactId);
-            console.log(`[DEBUG] Initialized workflow - now have ${updatedHistory.length} cycles`);
             return res.status(200).json({
               success: true,
               data: updatedHistory
@@ -39,13 +45,18 @@ export class ArtifactWorkflowController {      public static async getWorkflowHi
         data: history
       });
     } catch (error: any) {
-      console.error(`[ERROR] Failed to fetch workflow history:`, error);
       return res.status(500).json({
         success: false,
         message: error.message || 'Failed to fetch workflow history'
       });
     }
   }
+  
+  /**
+   * Lấy thống kê workflow của một project
+   * @param req - Express request với projectId trong params
+   * @param res - Express response
+   */
   public static async getProjectWorkflowStats(req: Request, res: Response) {
     try {
       const { projectId } = req.params;
@@ -63,6 +74,12 @@ export class ArtifactWorkflowController {      public static async getWorkflowHi
       });
     }
   }
+
+  /**
+   * Lấy danh sách artifacts theo bước workflow
+   * @param req - Express request với projectId trong params và step trong query
+   * @param res - Express response
+   */
   public static async getArtifactsByWorkflowStep(req: Request, res: Response) {
     try {
       const { projectId } = req.params;
@@ -70,7 +87,7 @@ export class ArtifactWorkflowController {      public static async getWorkflowHi
       
       const stepNumber = step ? parseInt(step as string) : undefined;
       
-      // Find artifacts in the specified project and step
+      // Tìm artifacts trong project và bước được chỉ định
       const query: any = { projectId };
       if (stepNumber && stepNumber >= 1 && stepNumber <= 5) {
         query.currentWorkflowStep = stepNumber;
@@ -89,32 +106,115 @@ export class ArtifactWorkflowController {      public static async getWorkflowHi
       });
     }
   }
-  private static async _initializeWorkflowCycle(artifactId: string | mongoose.Types.ObjectId) {
-    console.log(`[INFO] Initializing new workflow cycle for artifact: ${artifactId}`);
-    
-    // Get the latest artifact data
+
+   /**
+   * Lấy lịch sử workflow của artifact
+   * @param artifactId - ID của artifact
+   * @returns Mảng các chu kỳ workflow
+   */
+  private static async _getWorkflowHistory(artifactId: string | mongoose.Types.ObjectId) {
     const artifact = await ArtifactModel.findById(artifactId);
     if (!artifact) {
       throw new Error('Artifact not found');
-    }    // First, check if we need to increment the workflow cycle count
+    }
+
+    // Nếu artifact này chưa có chu kỳ workflow nào, khởi tạo một chu kỳ
+    if (!artifact.workflowCycles || artifact.workflowCycles.length === 0) {
+      try {
+        await this._initializeWorkflowCycle(artifactId);
+        
+        // Lấy artifact đã cập nhật với chu kỳ workflow mới
+        const updatedArtifact = await ArtifactModel.findById(artifactId);
+        if (!updatedArtifact) {
+          throw new Error('Failed to initialize workflow cycle');
+        }
+        
+        return updatedArtifact.workflowCycles || [];
+      } catch (error) {
+        // Trả về mảng rỗng trong trường hợp lỗi khởi tạo
+        return [];
+      }
+    }
+
+    return artifact.workflowCycles || [];
+  }
+
+  /**
+   * Lấy thống kê workflow của project
+   * @param projectId - ID của project
+   * @returns Thống kê workflow
+   */
+  private static async _getProjectWorkflowStats(projectId: string | mongoose.Types.ObjectId) {
+    const artifacts = await ArtifactModel.find({ projectId });
+    
+    const stats = {
+      totalArtifacts: artifacts.length,
+      step1Count: 0,
+      step2Count: 0,
+      step3Count: 0,
+      step4Count: 0,
+      step5Count: 0,
+      completedArtifacts: 0,
+      totalCycles: 0,
+      averageCycles: 0,
+    };
+
+    artifacts.forEach(artifact => {
+      const step = artifact.currentWorkflowStep || 1;
+      
+      // Đếm artifacts theo bước hiện tại
+      if (step === 1) stats.step1Count++;
+      if (step === 2) stats.step2Count++;
+      if (step === 3) stats.step3Count++;
+      if (step === 4) stats.step4Count++;
+      if (step === 5) stats.step5Count++;
+
+      // Đếm artifacts đã hoàn thành
+      if (artifact.workflowCompleted) {
+        stats.completedArtifacts++;
+      }
+
+      // Tổng hợp tổng số chu kỳ
+      stats.totalCycles += artifact.workflowCyclesCount || 0;
+    });
+
+    // Tính trung bình chu kỳ trên mỗi artifact
+    stats.averageCycles = stats.totalArtifacts > 0 
+      ? stats.totalCycles / stats.totalArtifacts 
+      : 0;
+
+    return stats;
+  }
+  
+  /**
+   * Khởi tạo chu kỳ workflow mới cho artifact
+   * @param artifactId - ID của artifact
+   * @returns Artifact đã được cập nhật
+   */
+  private static async _initializeWorkflowCycle(artifactId: string | mongoose.Types.ObjectId) {
+    // Lấy dữ liệu artifact mới nhất
+    const artifact = await ArtifactModel.findById(artifactId);
+    if (!artifact) {
+      throw new Error('Artifact not found');
+    }
+    
+    // Kiểm tra xem có cần tăng số lượng chu kỳ workflow không
     const lastCyclesCount = artifact.workflowCyclesCount || 0;
     const cycleNumber = lastCyclesCount + 1;
     
-    console.log(`[DEBUG] Creating new workflow cycle #${cycleNumber} (previous cycles count: ${lastCyclesCount})`);
-    
-    // Initialize new cycle with all required fields
+    // Khởi tạo chu kỳ mới với tất cả các trường bắt buộc
     const newCycle = {
       cycleNumber,
-      currentStep: 1, // Start at step 1 (Detection)
+      currentStep: 1, // Bắt đầu ở bước 1 (Detection)
       startedAt: new Date(),
-      // Initialize all steps to ensure they exist in both currentWorkflowCycle and workflowCycles array
+      // Khởi tạo tất cả các bước để đảm bảo chúng tồn tại trong cả currentWorkflowCycle và mảng workflowCycles
       detection: {
-        completedAt: new Date(), // Detection is completed when the cycle starts
-        numberVuls: artifact.vulnerabilityList?.length || 0, // Initialize with current vulnerability count
+        // completedAt: new Date(), // Detection được hoàn thành khi chu kỳ bắt đầu
+        numberVuls: artifact.vulnerabilityList?.length || 0, // Khởi tạo với số lượng vulnerability hiện tại
         listVuls: []
       },
       classification: {
-        numberThreats: artifact.threatList?.length || 0, // Initialize with current threat count
+        numberThreats: artifact.threatList?.length || 0, // Khởi tạo với số lượng threat hiện tại
         listThreats: []
       },
       assignment: {
@@ -134,78 +234,67 @@ export class ArtifactWorkflowController {      public static async getWorkflowHi
       }
     };
     
-    // Create a deep copy for pushing to the workflow cycles array
+    // Tạo bản sao sâu để đẩy vào mảng workflow cycles
     const deepCopy = JSON.parse(JSON.stringify(newCycle));
     
-    // Check if we already have this cycle in the array to avoid duplicates
+    // Kiểm tra xem chu kỳ này đã tồn tại trong mảng chưa để tránh trùng lặp
     const existingCycle = artifact.workflowCycles?.find(
       (c: any) => c.cycleNumber === cycleNumber
     );
     
     let updateOperation: any = { 
       $set: {
-        workflowCyclesCount: cycleNumber,  // Set directly to the current cycle number
+        workflowCyclesCount: cycleNumber,  // Đặt trực tiếp số chu kỳ hiện tại
         currentWorkflowStep: 1,
         workflowCompleted: false,
         currentWorkflowCycle: newCycle
       }
     };
     
-    // Only push to array if this cycle doesn't exist yet
+    // Chỉ thêm vào mảng nếu chu kỳ này chưa tồn tại
     if (!existingCycle) {
       updateOperation.$push = { workflowCycles: deepCopy };
     }
     
-    console.log(`[DEBUG] Applying workflow update:`, {
-      cycleNumber,
-      existingCycle: existingCycle ? 'yes' : 'no',
-      willPush: !existingCycle
-    });
-    
-    // Use findOneAndUpdate with an atomic operation to ensure consistency
+    // Sử dụng findOneAndUpdate với hoạt động atomic để đảm bảo tính nhất quán
     const updatedArtifact = await ArtifactModel.findOneAndUpdate(
       { _id: artifact._id },
       updateOperation,
       { 
-        new: true,  // Return the updated document
-        runValidators: true  // Run schema validators
+        new: true,  // Trả về document đã cập nhật
+        runValidators: true  // Chạy schema validators
       }
     );
-      if (!updatedArtifact) {
+    
+    if (!updatedArtifact) {
       throw new Error(`Failed to initialize workflow cycle for artifact ${artifact._id}`);
     }
     
-    // Verify that the cycle was properly created/updated
+    // Xác minh rằng chu kỳ đã được tạo/cập nhật đúng cách
     const finalCheck = await ArtifactModel.findById(artifact._id);
     if (finalCheck) {
-      // Check if currentWorkflowCycle matches what we expect
+      // Kiểm tra xem currentWorkflowCycle có khớp với mong đợi không
       if (!finalCheck.currentWorkflowCycle || finalCheck.currentWorkflowCycle.cycleNumber !== cycleNumber) {
-        console.log(`[WARN] Workflow cycle verification failed:`, {
-          expected: cycleNumber,
-          actual: finalCheck.currentWorkflowCycle?.cycleNumber,
-          workflowCyclesCount: finalCheck.workflowCyclesCount,
-          cyclesInArray: finalCheck.workflowCycles?.length
-        });
-        
-        // Try to fix if needed
+        // Thử sửa nếu cần
         if (!finalCheck.currentWorkflowCycle) {
-          console.log(`[INFO] Auto-fixing: currentWorkflowCycle was not set`);
           await ArtifactModel.findByIdAndUpdate(
             artifact._id,
             { $set: { currentWorkflowCycle: newCycle } }
           );
         }
-      } else {
-        console.log(`[INFO] Workflow cycle #${cycleNumber} successfully initialized`);
       }
     }
     
     return updatedArtifact;
   }
 
+  /**
+   * Chuyển sang bước tiếp theo trong workflow
+   * @param artifactId - ID của artifact
+   * @param stepData - Dữ liệu của bước hiện tại
+   * @returns Artifact đã được cập nhật
+   */
   private static async _moveToNextStep(artifactId: string | mongoose.Types.ObjectId, stepData: any = {}) {
-    console.log(`[WorkflowController:_moveToNextStep] Starting for artifact: ${artifactId}`);
-    
     const artifact = await ArtifactModel.findById(artifactId);    
     if (!artifact) {
       throw new Error('Artifact not found');
@@ -218,116 +307,54 @@ export class ArtifactWorkflowController {      public static async getWorkflowHi
     const currentStep = artifact.currentWorkflowStep || 1;
     let nextStep = currentStep + 1;
     
-    // Update the current step data with completion timestamp
+    // Cập nhật dữ liệu bước hiện tại với timestamp hoàn thành
     const updatedStepData = {
       ...stepData,
       completedAt: new Date()
     };
     
-    // Update current step data
-    this._updateStepData(artifact, currentStep, updatedStepData);    // Check if we've completed all steps
+    // Cập nhật dữ liệu bước hiện tại
+    this._updateStepData(artifact, currentStep, updatedStepData);
+    
+    // Kiểm tra xem đã hoàn thành tất cả các bước chưa
     if (nextStep > 5) {
-      console.log(`[INFO] Completed all steps for cycle #${artifact.currentWorkflowCycle.cycleNumber}`);
-      
-      // Mark the current cycle as completed using atomic update
+      // Đánh dấu chu kỳ hiện tại đã hoàn thành bằng cách sử dụng atomic update
       await ArtifactModel.findByIdAndUpdate(
         artifact._id,
         { 
           $set: {
             'currentWorkflowCycle.completedAt': new Date(),
-            workflowCyclesCount: artifact.currentWorkflowCycle.cycleNumber, // Ensure count is correctly set
+            workflowCyclesCount: artifact.currentWorkflowCycle.cycleNumber, // Đảm bảo count được đặt đúng
             workflowCompleted: true
           }
         },
         { new: true }
       );
       
-      // Start a new workflow cycle with a fresh artifact state
-      console.log(`[INFO] Starting new workflow cycle for artifact ${artifact._id}`);
+      // Bắt đầu chu kỳ workflow mới với trạng thái artifact mới
       return await ArtifactWorkflowController._initializeWorkflowCycle(artifact._id);
     }
 
-    // Update the current step
+    // Cập nhật bước hiện tại
     artifact.currentWorkflowStep = nextStep;
-    artifact.currentWorkflowCycle.currentStep = nextStep;    // Final sync to ensure all data is consistent
+    artifact.currentWorkflowCycle.currentStep = nextStep;
+    
+    // Đồng bộ cuối cùng để đảm bảo tất cả dữ liệu nhất quán
     this._syncWorkflowCycles(artifact);
-    // Validate workflow consistency
+    // Xác thực tính nhất quán của workflow
     this._validateWorkflowConsistency(artifact);
     await artifact.save();
     
     return artifact;
   }
-  private static async _getWorkflowHistory(artifactId: string | mongoose.Types.ObjectId) {
-    console.log(`[DEBUG] Getting workflow history for artifact ${artifactId}`);
-    const artifact = await ArtifactModel.findById(artifactId);
-    if (!artifact) {
-      throw new Error('Artifact not found');
-    }
-
-    // If this artifact has no workflow cycles yet, initialize one
-    if (!artifact.workflowCycles || artifact.workflowCycles.length === 0) {
-      console.log(`[INFO] No workflow cycles found for artifact ${artifactId}, initializing`);
-      try {
-        await this._initializeWorkflowCycle(artifactId);
-        
-        // Fetch the updated artifact with the new workflow cycle
-        const updatedArtifact = await ArtifactModel.findById(artifactId);
-        if (!updatedArtifact) {
-          throw new Error('Failed to initialize workflow cycle');
-        }
-        
-        return updatedArtifact.workflowCycles || [];
-      } catch (error) {
-        console.error(`[ERROR] Failed to initialize workflow cycle:`, error);
-        // Return empty array in case of initialization error
-        return [];
-      }
-    }
-
-    return artifact.workflowCycles || [];
-  }
-
-  private static async _getProjectWorkflowStats(projectId: string | mongoose.Types.ObjectId) {
-    const artifacts = await ArtifactModel.find({ projectId });
-    
-    const stats = {
-      totalArtifacts: artifacts.length,
-      step1Count: 0,
-      step2Count: 0,
-      step3Count: 0,
-      step4Count: 0,
-      step5Count: 0,
-      completedArtifacts: 0,
-      totalCycles: 0,
-      averageCycles: 0,
-    };
-
-    artifacts.forEach(artifact => {
-      const step = artifact.currentWorkflowStep || 1;
-      
-      // Count artifacts by current step
-      if (step === 1) stats.step1Count++;
-      if (step === 2) stats.step2Count++;
-      if (step === 3) stats.step3Count++;
-      if (step === 4) stats.step4Count++;
-      if (step === 5) stats.step5Count++;
-
-      // Count completed artifacts
-      if (artifact.workflowCompleted) {
-        stats.completedArtifacts++;
-      }
-
-      // Sum up total cycles
-      stats.totalCycles += artifact.workflowCyclesCount || 0;
-    });
-
-    // Calculate average cycles per artifact
-    stats.averageCycles = stats.totalArtifacts > 0 
-      ? stats.totalCycles / stats.totalArtifacts 
-      : 0;
-
-    return stats;
-  }
+  
+  /**
+   * Cập nhật dữ liệu của một bước workflow
+   * @param artifact - Artifact cần cập nhật
+   * @param step - Số bước (1-5)
+   * @param data - Dữ liệu cần cập nhật
+   * @returns True nếu thành công, false nếu thất bại
+   */
   private static _updateStepData(artifact: Artifact, step: number, data: any) {
     if (!artifact.currentWorkflowCycle) {
       return false;
@@ -378,20 +405,24 @@ export class ArtifactWorkflowController {      public static async getWorkflowHi
           };
           break;
         default:
-          console.warn(`[WorkflowController:_updateStepData] Invalid step number: ${step}`);
           return false;
       }
-        // Synchronize the workflow cycles array with the current workflow cycle
+      
+      // Đồng bộ mảng workflow cycles với chu kỳ workflow hiện tại
       this._syncWorkflowCycles(artifact);
       
       return true;
     } catch (error) {
-      console.error(`[WorkflowController:_updateStepData] Error updating step ${step} data:`, error);
       return false;
     }
   }
 
-
+  /**
+   * Cập nhật trạng thái workflow cho artifact
+   * @param artifactId - ID của artifact
+   * @param step - Bước workflow hiện tại (1-5)
+   * @returns Artifact đã được cập nhật
+   */
   public static async updateWorkflowStatus(artifactId: string | mongoose.Types.ObjectId, step: number): Promise<any> {
     const artifact = await ArtifactModel.findById(artifactId)
       .populate('threatList')
@@ -404,27 +435,26 @@ export class ArtifactWorkflowController {      public static async getWorkflowHi
       throw new Error('Artifact not found');
     }
 
-    // Initialize workflow cycle if none exists
+    // Khởi tạo chu kỳ workflow nếu chưa có
     if (!artifact.currentWorkflowCycle) {
       return await ArtifactWorkflowController._initializeWorkflowCycle(artifactId);
     }
     
-    console.log(`[INFO] Start update for step: ${step}`);
-    // Check conditions for each step and update as necessary
+    // Kiểm tra điều kiện cho từng bước và cập nhật nếu cần thiết
     switch (step) {
-      case 1: // Detection step
+      case 1: // Bước Detection
         return await ArtifactWorkflowController._checkDetectionStepCompletion(artifact);
       
-      case 2: // Classification step
+      case 2: // Bước Classification
         return await ArtifactWorkflowController._checkClassificationStepCompletion(artifact);
       
-      case 3: // Assignment step
+      case 3: // Bước Assignment
         return await ArtifactWorkflowController._checkAssignmentStepCompletion(artifact);
       
-      case 4: // Remediation step
+      case 4: // Bước Remediation
         return await ArtifactWorkflowController._checkRemediationStepCompletion(artifact);
       
-      case 5: // Verification step
+      case 5: // Bước Verification
         return await ArtifactWorkflowController._checkVerificationStepCompletion(artifact);
       
       default:
@@ -434,59 +464,71 @@ export class ArtifactWorkflowController {      public static async getWorkflowHi
     }
   }
 
+  /**
+   * Kiểm tra hoàn thành bước Detection
+   * @param artifact - Artifact cần kiểm tra
+   * @returns Artifact đã được cập nhật
+   */
   private static async _checkDetectionStepCompletion(artifact: any): Promise<any> {
-      // If artifact is still scanning, we can't move forward yet
+    // Nếu artifact vẫn đang quét, chưa thể tiến lên bước tiếp theo
     if (artifact.isScanning) {
       return artifact;
     }
     
-    // If there are no vulnerabilities, we still consider it complete but note this
+    // Nếu không có vulnerabilities, vẫn coi là hoàn thành nhưng ghi chú điều này
     const vulnCount = artifact.vulnerabilityList?.length || 0;
     
-    // Update detection step data
+    // Cập nhật dữ liệu bước detection
     if (artifact.currentWorkflowCycle && artifact.currentWorkflowCycle.detection) {
       artifact.currentWorkflowCycle.detection.listVuls = artifact.vulnerabilityList;
       artifact.currentWorkflowCycle.detection.numberVuls = vulnCount;
-      artifact.currentWorkflowCycle.detection.completedAt = new Date(); // Move to next step
-      // Sync workflow cycles to ensure data consistency
+      artifact.currentWorkflowCycle.detection.completedAt = new Date();
+      // Đồng bộ workflow cycles để đảm bảo tính nhất quán dữ liệu
       this._syncWorkflowCycles(artifact);
     }
     await artifact.save();
-    // Move to classification step
+    
+    // Chuyển sang bước classification
     if (artifact.currentWorkflowStep === 1) 
       return await ArtifactWorkflowController._moveToNextStep(artifact._id);
   }
 
+  /**
+   * Kiểm tra hoàn thành bước Classification
+   * @param artifact - Artifact cần kiểm tra
+   * @returns Artifact đã được cập nhật
+   */
   private static async _checkClassificationStepCompletion(artifact: any): Promise<any> {
-    // Count threat
+    // Đếm threat
     const threatCount = artifact.threatList?.length || 0;
     
-    // If we have threats, update classification step data and move forward
+    // Nếu có threats, cập nhật dữ liệu bước classification và tiến lên
     if (threatCount > 0) {
-      // Update classification step data
+      // Cập nhật dữ liệu bước classification
       if (artifact.currentWorkflowCycle) {
         if (!artifact.currentWorkflowCycle.classification) {
           artifact.currentWorkflowCycle.classification = {};
-        }        // Log the threats before updating
+        }
         
-        // Store threat IDs in the classification step data
+        // Lưu trữ ID của threats trong dữ liệu bước classification
         artifact.currentWorkflowCycle.classification.listThreats = artifact.threatList.map((threat: any) => 
           typeof threat === 'object' ? threat._id : threat
         );
         artifact.currentWorkflowCycle.classification.numberThreats = threatCount;
         artifact.currentWorkflowCycle.classification.completedAt = new Date();
         
-        // Sync workflow cycles to ensure data consistency
+        // Đồng bộ workflow cycles để đảm bảo tính nhất quán dữ liệu
         this._syncWorkflowCycles(artifact);
         
         await artifact.save();
-      
       }
+      
       if (artifact.currentWorkflowStep === 2) 
         return await ArtifactWorkflowController._moveToNextStep(artifact._id);
     }
-      // If no threats, check if we need to mark detection as complete anyway
-    // This happens if all vulnerabilities were resolved in a previous cycle
+    
+    // Nếu không có threats, kiểm tra xem có cần đánh dấu detection hoàn thành
+    // Điều này xảy ra nếu tất cả vulnerabilities đã được giải quyết trong chu kỳ trước
     const vulnerabilityCount = artifact.vulnerabilityList?.length || 0;
     if (vulnerabilityCount === 0 && threatCount === 0) {
       artifact.workflowCompleted = true;
@@ -496,15 +538,20 @@ export class ArtifactWorkflowController {      public static async getWorkflowHi
     return artifact;
   }
 
+  /**
+   * Kiểm tra hoàn thành bước Assignment
+   * @param artifact - Artifact cần kiểm tra
+   * @returns Artifact đã được cập nhật
+   */
   private static async _checkAssignmentStepCompletion(artifact: any): Promise<any> {    
-    // Get ticket counts and lists
+    // Lấy số lượng và danh sách tickets
     const {
       tickets,
       assigned: assignedTickets,
       unassigned: unassignedTickets
     } = await ArtifactWorkflowController._getTicketCounts(artifact._id);
         
-    // Update assignment step data
+    // Cập nhật dữ liệu bước assignment
     if (artifact.currentWorkflowCycle) {
       if (!artifact.currentWorkflowCycle.assignment) {
         artifact.currentWorkflowCycle.assignment = {};
@@ -517,7 +564,7 @@ export class ArtifactWorkflowController {      public static async getWorkflowHi
       await artifact.save();
     }
     
-    // If at least one ticket is assigned, move to remediation step
+    // Nếu ít nhất một ticket được phân công, chuyển sang bước remediation
     if (assignedTickets.length > 0) {
       if (artifact.currentWorkflowStep === 3) 
         return await ArtifactWorkflowController._moveToNextStep(artifact._id);
@@ -526,7 +573,13 @@ export class ArtifactWorkflowController {      public static async getWorkflowHi
     return artifact;
   }
 
-  private static async _checkRemediationStepCompletion(artifact: any): Promise<any> {      // Get ticket counts and lists using our utility method
+  /**
+   * Kiểm tra hoàn thành bước Remediation
+   * @param artifact - Artifact cần kiểm tra
+   * @returns Artifact đã được cập nhật
+   */
+  private static async _checkRemediationStepCompletion(artifact: any): Promise<any> {
+    // Lấy số lượng và danh sách tickets bằng phương thức tiện ích
     const {
       tickets,
       submitted: submittedTickets,
@@ -534,7 +587,7 @@ export class ArtifactWorkflowController {      public static async getWorkflowHi
       resolved: resolvedTickets
     } = await ArtifactWorkflowController._getTicketCounts(artifact._id);
         
-    // Update remediation step data
+    // Cập nhật dữ liệu bước remediation
     if (artifact.currentWorkflowCycle) {
       if (!artifact.currentWorkflowCycle.remediation) {
         artifact.currentWorkflowCycle.remediation = {};
@@ -548,7 +601,7 @@ export class ArtifactWorkflowController {      public static async getWorkflowHi
       await artifact.save();
     }
     
-    // If at least one ticket is submitted/resolved, move to verification step
+    // Nếu ít nhất một ticket được submit/resolve, chuyển sang bước verification
     if (submittedTickets.length > 0) {
       if (artifact.currentWorkflowStep === 4) 
         return await ArtifactWorkflowController._moveToNextStep(artifact._id);
@@ -557,104 +610,96 @@ export class ArtifactWorkflowController {      public static async getWorkflowHi
     return artifact;
   }
 
+  /**
+   * Kiểm tra hoàn thành bước Verification
+   * @param artifact - Artifact cần kiểm tra
+   * @returns Artifact đã được cập nhật
+   */
   private static async _checkVerificationStepCompletion(artifact: any): Promise<any> {    
-    // If the artifact is still scanning, it's in the verification process
-    console.log(`[INFO] Checking verification for artifact: ${artifact._id}`);
+    // Nếu artifact vẫn đang quét, đang trong quá trình verification
     if (artifact.isScanning) {
       return artifact;
     }
-      // Get ticket counts and lists using our utility method
+    
+    // Lấy số lượng và danh sách tickets bằng phương thức tiện ích
     const {
       tickets,
       resolved: resolvedTickets,
-      returned: returnedTickets    } = await ArtifactWorkflowController._getTicketCounts(artifact._id);
+      returned: returnedTickets
+    } = await ArtifactWorkflowController._getTicketCounts(artifact._id);
     
-    console.log(`[INFO] resolvedTickets: ${resolvedTickets.length}`);
-    console.log(`[INFO] returnedTickets: ${returnedTickets.length}`);    // Update verification step data using findOneAndUpdate to avoid version conflicts
+    // Cập nhật dữ liệu bước verification bằng findOneAndUpdate để tránh xung đột version
     if (artifact.currentWorkflowCycle) {
-      // Prepare verification data
+      // Chuẩn bị dữ liệu verification
       const verificationData: any = {
         'currentWorkflowCycle.verification.numberTicketsResolved': resolvedTickets.length,
         'currentWorkflowCycle.verification.numberTicketsReturnedToProcessing': returnedTickets.length,
         'currentWorkflowCycle.verification.completedAt': new Date()
       };
       
-      // Update using findOneAndUpdate to avoid version conflicts
+      // Cập nhật bằng findOneAndUpdate để tránh xung đột version
       await ArtifactModel.findByIdAndUpdate(
         artifact._id,
         { $set: verificationData },
         { new: true }
       );
       
-      // Get fresh artifact data after update
+      // Lấy dữ liệu artifact mới sau khi cập nhật
       artifact = await ArtifactModel.findById(artifact._id);
     }
     
-    // Complete this workflow cycle and potentially start a new one    // Check if any issues require another cycle
+    // Hoàn thành chu kỳ workflow này và có thể bắt đầu chu kỳ mới
+    // Kiểm tra xem có vấn đề nào cần chu kỳ khác không
     if (returnedTickets.length > 0 || artifact.vulnerabilityList?.length > 0) {
-      console.log(`[INFO] START NEW CYCLE`);
-      
-      // Get a fresh artifact before starting a new cycle to ensure we have the latest data
+      // Lấy artifact mới trước khi bắt đầu chu kỳ mới để đảm bảo có dữ liệu mới nhất
       const freshArtifact = await ArtifactModel.findById(artifact._id);
       if (!freshArtifact) {
         throw new Error(`Failed to retrieve artifact ${artifact._id} before starting new cycle`);
       }
       
-      console.log(`[DEBUG] Current workflow data before new cycle:`, {
-        cyclesCount: freshArtifact.workflowCyclesCount,
-        currentStep: freshArtifact.currentWorkflowStep,
-        cyclesLength: freshArtifact.workflowCycles?.length
-      });
-      
-      // CRITICAL: First ensure the current cycle is saved to the workflowCycles array
+      // QUAN TRỌNG: Đầu tiên đảm bảo chu kỳ hiện tại được lưu vào mảng workflowCycles
       if (freshArtifact.currentWorkflowCycle) {
         const currentCycle = freshArtifact.currentWorkflowCycle;
         const cycleNumber = currentCycle.cycleNumber;
         
-        console.log(`[INFO] Ensuring current cycle #${cycleNumber} is saved to workflowCycles array`);
-        
-        // Mark the current cycle as completed
+        // Đánh dấu chu kỳ hiện tại đã hoàn thành
         currentCycle.completedAt = new Date();
         
-        // Find if this cycle already exists in the array
+        // Tìm xem chu kỳ này đã tồn tại trong mảng chưa
         const existingCycleIndex = freshArtifact.workflowCycles?.findIndex(
           (c: any) => c.cycleNumber === cycleNumber
         ) ?? -1;
         
-        // Create a clean deep copy
+        // Tạo bản sao sạch
         const cycleCopy = JSON.parse(JSON.stringify(currentCycle));
         
-        // Update operation - either update the existing cycle or push a new one
+        // Hoạt động cập nhật - hoặc cập nhật chu kỳ hiện có hoặc thêm chu kỳ mới
         let updateOp: any;
         
         if (existingCycleIndex >= 0) {
-          // Update existing cycle
+          // Cập nhật chu kỳ hiện có
           updateOp = { 
             $set: { [`workflowCycles.${existingCycleIndex}`]: cycleCopy }
           };
-          console.log(`[DEBUG] Updating existing cycle at index ${existingCycleIndex}`);
         } else {
-          // Add new cycle
+          // Thêm chu kỳ mới
           updateOp = { 
             $push: { workflowCycles: cycleCopy }
           };
-          console.log(`[DEBUG] Adding new cycle to workflowCycles array`);
         }
         
-        // Apply the update
+        // Áp dụng cập nhật
         await ArtifactModel.findByIdAndUpdate(
           freshArtifact._id,
           updateOp,
-          { new: false }  // Don't need the updated document right now
+          { new: false }
         );
       }
       
-      // Now initialize a new workflow cycle - this will handle the updates atomically
+      // Bây giờ khởi tạo chu kỳ workflow mới - sẽ xử lý các cập nhật một cách atomic
       return await ArtifactWorkflowController._initializeWorkflowCycle(freshArtifact._id);
     } else {
-      console.log(`[INFO] WORKFLOW COMPLETED - No tickets returned or vulnerabilities remaining`);
-      
-      // Update workflow completed status - use only one atomic operation
+      // Cập nhật trạng thái workflow đã hoàn thành - chỉ sử dụng một hoạt động atomic
       const completedArtifact = await ArtifactModel.findByIdAndUpdate(
         artifact._id,
         { $set: { workflowCompleted: true } },
@@ -665,6 +710,11 @@ export class ArtifactWorkflowController {      public static async getWorkflowHi
     }
   }
 
+  /**
+   * Lấy số lượng và phân loại tickets của artifact
+   * @param artifactId - ID của artifact
+   * @returns Object chứa các mảng tickets đã phân loại
+   */
   private static async _getTicketCounts(artifactId: string | mongoose.Types.ObjectId): Promise<{
     tickets: any[];
     assigned: any[];
@@ -675,7 +725,7 @@ export class ArtifactWorkflowController {      public static async getWorkflowHi
     returned: any[];
   }> {
     
-    // Get the artifact with populated threatList
+    // Lấy artifact với threatList đã populate
     const artifact = await ArtifactModel.findById(artifactId).populate('threatList');
     
     if (!artifact || !artifact.threatList) {
@@ -690,15 +740,15 @@ export class ArtifactWorkflowController {      public static async getWorkflowHi
       };
     }
     
-    // Get threat IDs
+    // Lấy ID của threats
     const threatIds = artifact.threatList.map((threat: any) => threat._id);
     
-    // Query tickets for these threats
+    // Truy vấn tickets cho các threats này
     const tickets = await TicketModel.find({ 
       targetedThreat: { $in: threatIds }
     });
         
-    // Categorize tickets
+    // Phân loại tickets
     const assigned = tickets.filter((ticket: any) => ticket.status !== "Not accepted");
     const unassigned = tickets.filter((ticket: any) => ticket.status === "Not accepted");
     
@@ -712,8 +762,8 @@ export class ArtifactWorkflowController {      public static async getWorkflowHi
     
     const resolved = tickets.filter((ticket: any) => ticket.status === "Resolved");
     
-    // Identify returned tickets using previousStatus field
-    // A ticket is considered returned if it was in "Submitted" status but now back in "Processing"
+    // Xác định tickets được trả về bằng trường previousStatus
+    // Ticket được coi là trả về nếu từng ở trạng thái "Submitted" nhưng giờ quay lại "Processing"
     const returned = tickets.filter((ticket: any) => 
       ticket.status === "Processing" && ticket.previousStatus === "Submitted"
     );
@@ -729,56 +779,53 @@ export class ArtifactWorkflowController {      public static async getWorkflowHi
     };
   }
 
+  /**
+   * Đồng bộ mảng workflow cycles với chu kỳ workflow hiện tại
+   * @param artifact - Artifact cần đồng bộ
+   */
   private static _syncWorkflowCycles(artifact: any): void {
-    console.log(`[DEBUG] Syncing workflow cycles for artifact: ${artifact._id}`);
-    
     if (!artifact.currentWorkflowCycle) {
-      console.log(`[WARN] No currentWorkflowCycle to sync`);
       return;
     }
     
     if (!artifact.workflowCycles) {
-      console.log(`[DEBUG] workflowCycles array not found, initializing empty array`);
       artifact.workflowCycles = [];
     }
     
     const currentCycleNumber = artifact.currentWorkflowCycle.cycleNumber;
-    console.log(`[DEBUG] Syncing cycle #${currentCycleNumber}`);
     
-    // Find the matching cycle in the workflowCycles array
+    // Tìm chu kỳ tương ứng trong mảng workflowCycles
     const cycleIndex = artifact.workflowCycles.findIndex(
       (cycle: any) => cycle.cycleNumber === currentCycleNumber
     );
     
-    // Create deep copy to ensure it's a separate object
+    // Tạo bản sao sâu để đảm bảo đó là object riêng biệt
     const cycleCopy = JSON.parse(JSON.stringify(artifact.currentWorkflowCycle));
     
     if (cycleIndex === -1) {
-      // Add it if not found
-      console.log(`[DEBUG] Cycle #${currentCycleNumber} not found in workflowCycles array, adding it`);
+      // Thêm nếu không tìm thấy
       artifact.workflowCycles.push(cycleCopy);
     } else {
-      // Replace the existing cycle with the current one to ensure they're in sync
-      console.log(`[DEBUG] Updating existing cycle #${currentCycleNumber} at index ${cycleIndex}`);
+      // Thay thế chu kỳ hiện có bằng chu kỳ hiện tại để đảm bảo đồng bộ
       artifact.workflowCycles[cycleIndex] = cycleCopy;
     }
     
-    // Ensure workflowCyclesCount is consistent with the current cycle
+    // Đảm bảo workflowCyclesCount nhất quán với chu kỳ hiện tại
     if ((artifact.workflowCyclesCount || 0) < currentCycleNumber) {
-      console.log(`[DEBUG] Updating workflowCyclesCount from ${artifact.workflowCyclesCount} to ${currentCycleNumber}`);
       artifact.workflowCyclesCount = currentCycleNumber;
     }
   }
+  
+  /**
+   * Xác thực tính nhất quán của workflow
+   * @param artifact - Artifact cần xác thực
+   */
   private static _validateWorkflowConsistency(artifact: any): void {
-    console.log(`[DEBUG] Validating workflow consistency for artifact: ${artifact._id}`);
-    
     if (!artifact.currentWorkflowCycle) {
-      console.log(`[WARN] No currentWorkflowCycle to validate`);
       return;
     }
     
     if (!artifact.workflowCycles || artifact.workflowCycles.length === 0) {
-      console.log(`[WARN] workflowCycles array is empty or undefined`);
       return;
     }
     
@@ -786,31 +833,22 @@ export class ArtifactWorkflowController {      public static async getWorkflowHi
     const matchingCycle = artifact.workflowCycles.find((c: any) => c.cycleNumber === currentCycleNumber);
     
     if (!matchingCycle) {
-      console.log(`[ERROR] Current cycle #${currentCycleNumber} not found in workflowCycles array!`);
-      console.log(`[DEBUG] Available cycles:`, artifact.workflowCycles.map((c: any) => c.cycleNumber));
-      
-      // Auto-fix: add the current cycle to the array
-      console.log(`[INFO] Auto-fixing: Adding current cycle to workflowCycles array`);
+      // Tự động sửa: thêm chu kỳ hiện tại vào mảng
       const cycleCopy = JSON.parse(JSON.stringify(artifact.currentWorkflowCycle));
       artifact.workflowCycles.push(cycleCopy);
     } else {
-      // Verify that the steps match
+      // Xác minh các bước có khớp không
       if (matchingCycle.currentStep !== artifact.currentWorkflowCycle.currentStep) {
-        console.log(`[WARN] Step mismatch: currentWorkflowCycle.currentStep=${artifact.currentWorkflowCycle.currentStep}, workflowCycles[].currentStep=${matchingCycle.currentStep}`);
-        
-        // Auto-fix: update the cycle in the array
+        // Tự động sửa: cập nhật chu kỳ trong mảng
         const index = artifact.workflowCycles.findIndex((c: any) => c.cycleNumber === currentCycleNumber);
         if (index !== -1) {
-          console.log(`[INFO] Auto-fixing: Updating cycle in workflowCycles array`);
           artifact.workflowCycles[index] = JSON.parse(JSON.stringify(artifact.currentWorkflowCycle));
         }
       }
     }
     
-    // Ensure workflowCyclesCount is consistent
+    // Đảm bảo workflowCyclesCount nhất quán
     if (artifact.workflowCyclesCount !== currentCycleNumber) {
-      console.log(`[WARN] workflowCyclesCount (${artifact.workflowCyclesCount}) does not match currentWorkflowCycle.cycleNumber (${currentCycleNumber})`);
-      console.log(`[INFO] Auto-fixing: Setting workflowCyclesCount to ${currentCycleNumber}`);
       artifact.workflowCyclesCount = currentCycleNumber;
     }
   }
