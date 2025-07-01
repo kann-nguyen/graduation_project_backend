@@ -510,6 +510,8 @@ export async function removeArtifactFromPhase(req: Request, res: Response) {
       $pull: { artifacts: artifactId },
     });
     await ArtifactModel.findByIdAndDelete(artifactId);
+    // Delete all tickets associated with this artifact
+    await TicketModel.deleteMany({ artifactId: artifactId });
     return res.json(successResponse(null, "Artifact removed from phase"));
   } catch (error) {
     return res.json(errorResponse(`Internal server error: ${error}`));

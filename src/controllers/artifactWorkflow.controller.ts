@@ -2,7 +2,6 @@ import { Request, Response } from 'express';
 import { ArtifactModel, TicketModel } from '../models/models';
 import { Artifact } from '../models/artifact';
 import mongoose from 'mongoose';
-import { Ticket } from '../models/ticket';
 
 /**
  * Controller xử lý workflow của artifact (Quy trình làm việc với artifact)
@@ -341,8 +340,6 @@ export class ArtifactWorkflowController {
     
     // Đồng bộ cuối cùng để đảm bảo tất cả dữ liệu nhất quán
     this._syncWorkflowCycles(artifact);
-    // Xác thực tính nhất quán của workflow
-    this._validateWorkflowConsistency(artifact);
     await artifact.save();
     
     return artifact;
@@ -561,6 +558,9 @@ export class ArtifactWorkflowController {
       artifact.currentWorkflowCycle.assignment.numberTicketsAssigned = assignedTickets.length;
       artifact.currentWorkflowCycle.assignment.numberTicketsNotAssigned = unassignedTickets.length;
       
+      // Đồng bộ workflow cycles trước khi lưu để đảm bảo tính nhất quán dữ liệu
+      this._syncWorkflowCycles(artifact);
+      
       await artifact.save();
     }
     
@@ -598,6 +598,9 @@ export class ArtifactWorkflowController {
       artifact.currentWorkflowCycle.remediation.numberTicketsNotSubmitted = notSubmittedTickets.length;
       artifact.currentWorkflowCycle.remediation.completedAt = submittedTickets.length > 0 ? new Date() : undefined;
       
+      // Đồng bộ workflow cycles trước khi lưu để đảm bảo tính nhất quán dữ liệu
+      this._syncWorkflowCycles(artifact);
+      
       await artifact.save();
     }
     
@@ -617,36 +620,38 @@ export class ArtifactWorkflowController {
    */
   private static async _checkVerificationStepCompletion(artifact: any): Promise<any> {    
     // Nếu artifact vẫn đang quét, đang trong quá trình verification
-    if (artifact.isScanning) {
+    if (artifact.isScanning || artifact.currentWorkflowCycle.currentStep != 5) {
       return artifact;
     }
     
     // Lấy số lượng và danh sách tickets bằng phương thức tiện ích
     const {
-      tickets,
       resolved: resolvedTickets,
       returned: returnedTickets
     } = await ArtifactWorkflowController._getTicketCounts(artifact._id);
     
-    // Cập nhật dữ liệu bước verification bằng findOneAndUpdate để tránh xung đột version
+    // Cập nhật dữ liệu bước verification
     if (artifact.currentWorkflowCycle) {
-      // Chuẩn bị dữ liệu verification
-      const verificationData: any = {
-        'currentWorkflowCycle.verification.numberTicketsResolved': resolvedTickets.length,
-        'currentWorkflowCycle.verification.numberTicketsReturnedToProcessing': returnedTickets.length,
-        'currentWorkflowCycle.verification.completedAt': new Date()
-      };
+      // Khởi tạo đối tượng verification nếu cần
+      if (!artifact.currentWorkflowCycle.verification) {
+        artifact.currentWorkflowCycle.verification = {};
+      }
       
-      // Cập nhật bằng findOneAndUpdate để tránh xung đột version
-      await ArtifactModel.findByIdAndUpdate(
-        artifact._id,
-        { $set: verificationData },
-        { new: true }
-      );
+      // Cập nhật dữ liệu trực tiếp vào currentWorkflowCycle
+      artifact.currentWorkflowCycle.verification.numberTicketsResolved = resolvedTickets.length;
+      artifact.currentWorkflowCycle.verification.numberTicketsReturnedToProcessing = returnedTickets.length;
+      artifact.currentWorkflowCycle.verification.completedAt = new Date();
       
-      // Lấy dữ liệu artifact mới sau khi cập nhật
-      artifact = await ArtifactModel.findById(artifact._id);
+      // Sử dụng phương thức _syncWorkflowCycles để đồng bộ đúng cách 
+      // và nhất quán với các bước khác
+      this._syncWorkflowCycles(artifact);
+      
+      // Lưu artifact sau khi đồng bộ
+      await artifact.save();
+      // Kiểm tra và log để xác nhận đồng bộ thành công
+      console.log(`[INFO] Verification step completion: resolved tickets: ${resolvedTickets.length}, returned tickets: ${returnedTickets.length}`);
     }
+
     
     // Hoàn thành chu kỳ workflow này và có thể bắt đầu chu kỳ mới
     // Kiểm tra xem có vấn đề nào cần chu kỳ khác không
@@ -709,6 +714,7 @@ export class ArtifactWorkflowController {
       return completedArtifact;
     }
   }
+  
 
   /**
    * Lấy số lượng và phân loại tickets của artifact
@@ -724,28 +730,9 @@ export class ArtifactWorkflowController {
     resolved: any[];
     returned: any[];
   }> {
-    
-    // Lấy artifact với threatList đã populate
-    const artifact = await ArtifactModel.findById(artifactId).populate('threatList');
-    
-    if (!artifact || !artifact.threatList) {
-      return {
-        tickets: [],
-        assigned: [],
-        unassigned: [],
-        submitted: [],
-        notSubmitted: [],
-        resolved: [],
-        returned: []
-      };
-    }
-    
-    // Lấy ID của threats
-    const threatIds = artifact.threatList.map((threat: any) => threat._id);
-    
-    // Truy vấn tickets cho các threats này
+    // Truy vấn tickets cho artifact này
     const tickets = await TicketModel.find({ 
-      targetedThreat: { $in: threatIds }
+      artifactId: artifactId
     });
         
     // Phân loại tickets
@@ -815,41 +802,5 @@ export class ArtifactWorkflowController {
       artifact.workflowCyclesCount = currentCycleNumber;
     }
   }
-  
-  /**
-   * Xác thực tính nhất quán của workflow
-   * @param artifact - Artifact cần xác thực
-   */
-  private static _validateWorkflowConsistency(artifact: any): void {
-    if (!artifact.currentWorkflowCycle) {
-      return;
-    }
-    
-    if (!artifact.workflowCycles || artifact.workflowCycles.length === 0) {
-      return;
-    }
-    
-    const currentCycleNumber = artifact.currentWorkflowCycle.cycleNumber;
-    const matchingCycle = artifact.workflowCycles.find((c: any) => c.cycleNumber === currentCycleNumber);
-    
-    if (!matchingCycle) {
-      // Tự động sửa: thêm chu kỳ hiện tại vào mảng
-      const cycleCopy = JSON.parse(JSON.stringify(artifact.currentWorkflowCycle));
-      artifact.workflowCycles.push(cycleCopy);
-    } else {
-      // Xác minh các bước có khớp không
-      if (matchingCycle.currentStep !== artifact.currentWorkflowCycle.currentStep) {
-        // Tự động sửa: cập nhật chu kỳ trong mảng
-        const index = artifact.workflowCycles.findIndex((c: any) => c.cycleNumber === currentCycleNumber);
-        if (index !== -1) {
-          artifact.workflowCycles[index] = JSON.parse(JSON.stringify(artifact.currentWorkflowCycle));
-        }
-      }
-    }
-    
-    // Đảm bảo workflowCyclesCount nhất quán
-    if (artifact.workflowCyclesCount !== currentCycleNumber) {
-      artifact.workflowCyclesCount = currentCycleNumber;
-    }
-  }
 }
+
